@@ -33,6 +33,8 @@ jobs:
           for chip in $(python -c "import yaml; print(' '.join(yaml.safe_load(open('build/chips.yaml'))['chips']))"); do
             python build/build_chip.py "$chip"
           done
+      - name: Stamp asset versions so browsers fetch new code after a deploy
+        run: sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" public/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public

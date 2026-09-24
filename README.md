@@ -50,7 +50,7 @@ Chips are configured in `build/chips.yaml` (logical layers + colours, shared by 
 python3 -m venv .venv && .venv/bin/pip install -r build/requirements.txt
 .venv/bin/python build/fetch.py                  # download layouts to build/cache/
 for c in tt02 ttgf0p2 ttihp25b; do .venv/bin/python build/build_chip.py $c; done   # tiles, vector chunks, thumbnail -> public/data/ (~4 min per chip)
-python3 -m http.server -d public 8000            # open http://localhost:8000
+.venv/bin/python build/serve.py 8000             # open http://localhost:8000 (no-cache test server)
 ```
 
 Saved cross-sections: draw a line, "Save current line…", then "Download lines.json" and commit it as `public/data/<chip>/lines.json`. Coordinates in that file are absolute µm from the die's lower-left corner.
