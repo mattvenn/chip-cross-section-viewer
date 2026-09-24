@@ -50,7 +50,8 @@ button, select, input {
   padding: 6px 10px;
 }
 button { cursor: pointer; }
-button:hover { border-color: var(--accent); }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
 button.primary, button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 button.link { background: none; border: none; padding: 0; color: var(--accent); }
 select { width: 100%; }

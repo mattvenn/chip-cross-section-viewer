@@ -68,9 +68,10 @@
         <select id="saved-lines"><option value="">Choose a saved line…</option></select>
         <div class="row">
           <button data-action="save-line">Save current line…</button>
+          <button data-action="rename-line" disabled>Rename…</button>
         </div>
         <div class="row">
-          <button data-action="download-lines" title="Download lines.json, then commit it to data/&lt;chip&gt;/lines.json">Download lines.json</button>
+          <button data-action="download-lines" title="Downloads &lt;chip&gt;-lines.json; commit it as data/&lt;chip&gt;/lines.json">Download lines file</button>
           <button data-action="copy-lines">Copy JSON</button>
         </div>
         <p id="unsaved-note" class="note" hidden></p>

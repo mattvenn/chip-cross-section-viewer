@@ -301,7 +301,7 @@ function onMapClick(e) {
     const axis = state.mode === "place-h" ? "h" : "v";
     setMode(null);
     setCut({ axis, pos: axis === "h" ? p.y : p.x }, { newLine: true });
-    $("#saved-lines").value = "";
+    showSavedSelection("");
   } else if (state.mode === "zero") {
     setMode(null);
     setZero(p);
@@ -338,7 +338,7 @@ function onLineGrab(e) {
     map.dragging.enable();
     $("#map").classList.remove("moving-line-h", "moving-line-v");
     if (state.cut.pos !== orig.pos) {
-      $("#saved-lines").value = "";
+      showSavedSelection("");
       setCut(state.cut);
     }
   };
@@ -393,7 +393,7 @@ function onLineInput() {
   if (!state.cut || Number.isNaN(v)) return;
   const z = state.zero;
   setCut({ axis: state.cut.axis, pos: v + (state.cut.axis === "h" ? z.y : z.x) }, { show: true });
-  $("#saved-lines").value = "";
+  showSavedSelection("");
 }
 
 function setZero(p) {
@@ -477,27 +477,59 @@ async function loadSavedLines() {
     const r = await fetch(`data/${state.chip.id}/lines.json`, { cache: "no-cache" });
     state.fileLines = r.ok ? await r.json() : [];
   } catch { state.fileLines = []; }
-  // drop local copies that have since been committed to the file
-  const fileIds = new Set(state.fileLines.map(l => l.id));
-  state.localLines = state.localLines.filter(l => !fileIds.has(l.id));
+  // drop local lines (new or renamed) once the file contains exactly the same line
+  const sameLine = l => JSON.stringify([l.id, l.name, l.axis, l.pos, l.x0, l.y0, l.x1, l.y1, l.note || ""]);
+  const inFile = new Set(state.fileLines.map(sameLine));
+  state.localLines = state.localLines.filter(l => !inFile.has(sameLine(l)));
   storage.set(`lines:${state.chip.id}`, state.localLines);
   renderSavedLines();
 }
 
-function allLines() { return [...state.fileLines, ...state.localLines.map(l => ({ ...l, local: true }))]; }
+// File lines, with this browser's edits applied: a local line with the same id as a
+// file line replaces it (status "changed"); other local lines are new ("local").
+function allLines() {
+  const local = new Map(state.localLines.map(l => [l.id, l]));
+  const out = state.fileLines.map(l => local.has(l.id) ? { ...local.get(l.id), status: "changed" } : l);
+  const fileIds = new Set(state.fileLines.map(l => l.id));
+  return out.concat(state.localLines.filter(l => !fileIds.has(l.id)).map(l => ({ ...l, status: "local" })));
+}
 
 function renderSavedLines() {
   const sel = $("#saved-lines");
   sel.innerHTML = `<option value="">Choose a saved line…</option>` +
-    allLines().map(l => `<option value="${l.id}">${escapeHtml(l.name)}${l.local ? " (this browser only)" : ""}</option>`).join("");
+    allLines().map(l => `<option value="${l.id}">${escapeHtml(l.name)}${
+      l.status === "local" ? " (this browser only)" : l.status === "changed" ? " (renamed in this browser)" : ""}</option>`).join("");
+  showSavedSelection("");
   const n = state.localLines.length;
   $("#unsaved-note").hidden = !n;
-  $("#unsaved-note").textContent = `${n} line${n > 1 ? "s are" : " is"} only saved in this browser. Download lines.json and commit it to data/${state.chip.id}/lines.json to publish.`;
+  $("#unsaved-note").textContent = `${n} line${n > 1 ? "s have" : " has"} changes only saved in this browser. ` +
+    `Download the lines file and commit it as data/${state.chip.id}/lines.json to publish.`;
+}
+
+// Show `id` as the selected saved line ("" for none) and enable Rename to match.
+function showSavedSelection(id) {
+  $("#saved-lines").value = id;
+  $("[data-action=rename-line]").disabled = !$("#saved-lines").value;
 }
 
 function selectSavedLine(id) {
   const l = allLines().find(x => x.id === id);
   if (l) setCut(l, { show: true });
+  showSavedSelection(l ? id : "");
+}
+
+function renameLine() {
+  const id = $("#saved-lines").value;
+  const l = allLines().find(x => x.id === id);
+  if (!l) return;
+  const name = (prompt("New name for this cross-section:", l.name) || "").trim();
+  if (!name || name === l.name) return;
+  const { status, ...line } = l;
+  const i = state.localLines.findIndex(x => x.id === id);
+  if (i >= 0) state.localLines[i] = { ...line, name };
+  else state.localLines.push({ ...line, name });  // a renamed file line
+  storage.set(`lines:${state.chip.id}`, state.localLines);
+  loadSavedLines().then(() => showSavedSelection(id));
 }
 
 function saveLine() {
@@ -509,18 +541,18 @@ function saveLine() {
   state.localLines.push(entry);
   storage.set(`lines:${state.chip.id}`, state.localLines);
   renderSavedLines();
-  $("#saved-lines").value = entry.id;
+  showSavedSelection(entry.id);
 }
 
 function linesJson() {
-  return JSON.stringify(allLines().map(({ local, ...l }) => l), null, 2) + "\n";
+  return JSON.stringify(allLines().map(({ status, ...l }) => l), null, 2) + "\n";
 }
 
 function downloadLines() {
   const blob = new Blob([linesJson()], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "lines.json";
+  a.download = `${state.chip.id}-lines.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -569,10 +601,11 @@ const actions = {
   "confirm-chip": () => openViewer(state.pending),
   "place-h": () => setMode(state.mode === "place-h" ? null : "place-h"),
   "place-v": () => setMode(state.mode === "place-v" ? null : "place-v"),
-  "clear-line": () => { setMode(null); setCut(null); $("#saved-lines").value = ""; },
+  "clear-line": () => { setMode(null); setCut(null); showSavedSelection(""); },
   "set-zero": () => setMode(state.mode === "zero" ? null : "zero"),
   "reset-zero": () => setZero({ x: 0, y: 0 }),
   "save-line": saveLine,
+  "rename-line": renameLine,
   "download-lines": downloadLines,
   "copy-lines": copyLines,
 };
