@@ -58,8 +58,11 @@ sky130:
   # Source: SKY130 metal stack diagram (heights above substrate; poly drawn from the
   # active surface). https://skywater-pdk.readthedocs.io/en/main/rules/assumptions.html
   # Passivation: 0.6 µm over met5 (passv_thickness in efabless sky130_klayout_pdk
-  # tech/sky130/xsect/sky130.xs). That script also has an optional 6.1 µm polyimide
-  # layer on top, not included here. STI depth 0.3 µm (sti_depth, same script).
+  # tech/sky130/xsect/sky130.xs), plus the optional 6.1 µm polyimide (pi_thickness).
+  # We don't know if the chips have polyimide, so assume they do and stack the full
+  # 6.1 µm on the passivation: the longest cut, so a cut is sure to get through.
+  # (The script planarizes the polyimide to 6.1 µm above the met5 bottom, i.e. about
+  # 1.9 µm less.) STI depth 0.3 µm (sti_depth, same script).
   die_layer: null             # die box given in chips.yaml (the seal ring/scribe extends past it)
   layers:
     top_metal:       { gds: ["72/20"], label: "met5", z: [5.3711, 6.6311] }
@@ -71,8 +74,9 @@ sky130:
     - { label: "STI",         z: [-0.3, 0.0],    color: "#9aa3ad" }
     - { label: "Dielectric",  z: [0.0, 6.6311],   color: "#c9dbe8" }
     - { label: "Passivation", z: [6.6311, 7.2311], color: "#e4dcc6" }
+    - { label: "Polyimide",   z: [7.2311, 13.3311], color: "#e8c98e" }
   ticks:
     - { label: "li1", z: 0.9361 }
     - { label: "M1", z: 1.3761 }
     - { label: "M3", z: 2.7861 }
-  depth: { top: 7.2311, bottom: -0.3, estimate: false }  # met5 top 6.6311 + passivation 0.6 (no polyimide); sti_depth 0.3
+  depth: { top: 13.3311, bottom: -0.3, estimate: false, note: "assumes polyimide" }  # met5 top 6.6311 + passivation 0.6 + polyimide 6.1; sti_depth 0.3

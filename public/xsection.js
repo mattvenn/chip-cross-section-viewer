@@ -194,7 +194,7 @@ class CrossSection {
     const labels = [
       ...this.data.layers.map(l => ({ text: l.label, z: (l.z[0] + l.z[1]) / 2, color: l.color })),
       ...this.chip.ticks.map(t => ({ text: t.label, z: t.z, tick: true })),
-      ...this.chip.bands.filter(b => /substrate|passiv/i.test(b.label)).map(b => ({ text: b.label, z: (b.z[0] + b.z[1]) / 2, dim: true })),
+      ...this.chip.bands.filter(b => /substrate|passiv|polyimide/i.test(b.label)).map(b => ({ text: b.label, z: (b.z[0] + b.z[1]) / 2, dim: true })),
     ].sort((a, b) => a.z - b.z);
     let lastY = Infinity;
     for (const lb of labels) {
@@ -256,11 +256,24 @@ class CrossSection {
     ctx.fillText(`${est}${(d.top - bottom).toFixed(2)} µm`, x + 8, yMid - 20);
     ctx.font = "11px system-ui, sans-serif";
     ctx.fillStyle = muted;
-    const lines = ["cut depth", "through the", "transistors"].concat(d.estimate ? ["(estimate)"] : []);
+    const maxW = this.w - x - 12;
+    const lines = ["cut depth", "through the", "transistors"].concat(
+      d.estimate ? ["(estimate)"] : [], d.note ? wrapText(ctx, `(${d.note})`, maxW) : []);
     lines.forEach((t, i) => ctx.fillText(t, x + 8, yMid - 5 + 13 * i));
     ctx.fillText(`starts at ${est}${d.top.toFixed(2)}`, x + 8, ySi - 10);
     ctx.restore();
   }
+}
+
+// Split text into lines no wider than maxW (in the context's current font).
+function wrapText(ctx, text, maxW) {
+  const out = [];
+  for (const word of text.split(" ")) {
+    const last = out[out.length - 1];
+    if (last && ctx.measureText(`${last} ${word}`).width <= maxW) out[out.length - 1] = `${last} ${word}`;
+    else out.push(word);
+  }
+  return out;
 }
 
 function niceStep(raw) {
