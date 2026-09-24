@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chip Cross-Section Viewer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+
+<!-- Step 1/2: choose and confirm the chip -->
+<section id="picker" class="screen" hidden>
+  <div class="picker-inner">
+    <h1>Chip cross-section viewer</h1>
+    <p class="lede">Pick the chip on your bench. You'll confirm it matches before opening the viewer.</p>
+    <div id="chip-cards" class="cards"></div>
+  </div>
+</section>
+
+<section id="confirm" class="screen" hidden>
+  <div class="confirm-inner">
+    <button class="link back" data-action="back-to-picker">&larr; All chips</button>
+    <div class="confirm-grid">
+      <img id="confirm-thumb" alt="Layout overview of the selected chip">
+      <div>
+        <h1 id="confirm-name"></h1>
+        <dl class="facts" id="confirm-facts"></dl>
+        <p>Compare this overview with your die under the microscope. It shows the top metal, which is what you'll see from above. The origin (0, 0) is the <strong>lower-left corner</strong> of the die in this orientation.</p>
+        <div class="row">
+          <button class="primary" data-action="confirm-chip">Yes, this matches: open viewer</button>
+          <button data-action="back-to-picker">No, go back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Step 3: viewer -->
+<section id="viewer" class="screen" hidden>
+  <header class="topbar">
+    <div class="title">
+      <strong id="chip-title"></strong>
+      <span id="chip-sub" class="muted"></span>
+    </div>
+    <button data-action="back-to-picker">Change chip</button>
+  </header>
+
+  <div class="workspace">
+    <aside class="side">
+      <details class="panel" open>
+        <summary>Layers</summary>
+        <div id="layer-list" class="layer-list"></div>
+        <label class="slider">Opacity
+          <input id="opacity" type="range" min="0.2" max="1" step="0.05" value="0.8">
+        </label>
+      </details>
+
+      <details class="panel" open>
+        <summary>Saved cross-sections</summary>
+        <select id="saved-lines"><option value="">Choose a saved line…</option></select>
+        <div class="row">
+          <button data-action="save-line">Save current line…</button>
+        </div>
+        <div class="row">
+          <button data-action="download-lines" title="Download lines.json, then commit it to data/&lt;chip&gt;/lines.json">Download lines.json</button>
+          <button data-action="copy-lines">Copy JSON</button>
+        </div>
+        <p id="unsaved-note" class="note" hidden></p>
+      </details>
+
+      <details class="panel" open>
+        <summary>Cross-section line</summary>
+        <div class="row">
+          <button id="draw-btn" data-action="draw-line" class="primary">Draw line</button>
+          <button data-action="clear-line">Clear</button>
+        </div>
+        <p class="note">Click the start, then the end. Hold <kbd>Shift</kbd> to snap horizontal or vertical. Drag the end points to adjust.</p>
+        <div class="coords">
+          <span></span><span>X (µm)</span><span>Y (µm)</span>
+          <span>Start</span><input id="x0" type="number" step="0.001"><input id="y0" type="number" step="0.001">
+          <span>End</span><input id="x1" type="number" step="0.001"><input id="y1" type="number" step="0.001">
+        </div>
+        <p id="line-info" class="muted small"></p>
+      </details>
+
+      <details class="panel" open>
+        <summary>Zero point</summary>
+        <p class="small">Current zero (absolute): <span id="zero-info"></span></p>
+        <div class="row">
+          <button id="zero-btn" data-action="set-zero">Set zero on map</button>
+          <button data-action="zero-line-start">Zero = line start</button>
+          <button data-action="reset-zero">Reset</button>
+        </div>
+        <p class="note">Coordinates are shown relative to the zero. Saved lines always store absolute die coordinates (from the die's lower-left corner).</p>
+      </details>
+    </aside>
+
+    <div class="views">
+      <div id="map"></div>
+      <div class="xs-wrap">
+        <div class="xs-head">
+          <strong>Cross-section</strong>
+          <span id="xs-status" class="muted small"></span>
+          <span class="muted small xs-help">Scroll to zoom, drag to pan, double-click to reset. Vertical scale is schematic (split axis).</span>
+        </div>
+        <div id="xs" class="xs"><canvas id="xs-canvas"></canvas><div id="xs-tip" class="xs-tip" hidden></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="vector.js"></script>
+<script src="xsection.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

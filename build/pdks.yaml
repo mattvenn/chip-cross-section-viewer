@@ -1,0 +1,70 @@
+# Per-PDK layer mapping and nominal vertical stack.
+#
+# Every chip maps its GDS layers onto the same *logical* layers, so the viewer
+# can use one colour code for all chips (colours live in chips.yaml -> logical_layers).
+# Dummy fill datatypes are included: fill is physically on the die, so it shows
+# under the microscope and in a real cross-section.
+#
+# z values are in µm, with the silicon surface (top of active / bottom of gate) at z = 0.
+# They are only used for the schematic cross-section, so nominal values are fine.
+
+sg13g2:
+  name: IHP SG13G2 (130 nm BiCMOS)
+  # Source: IHP SG13G2 process spec, 2.16 "Layer Thickness Values"
+  # https://ihp-open-pdk-docs.readthedocs.io/en/latest/process_specs/02_process_control_params.html
+  die_layer: "189/4"          # prBoundary, gives the die outline
+  layers:
+    top_metal:       { gds: ["134/0", "134/22"], label: "TopMetal2", z: [10.83, 13.83] }
+    top_metal_below: { gds: ["126/0", "126/22"], label: "TopMetal1", z: [6.03, 8.03] }
+    poly:            { gds: ["5/0", "5/22"],     label: "GatPoly",   z: [0.0, 0.16] }
+    diff:            { gds: ["1/0", "1/22"],     label: "Activ",     z: [-0.4, 0.0] }
+  # Background bands drawn behind the logical layers in the cross-section.
+  bands:
+    - { label: "Substrate",   z: [-1.0, -0.4],  color: "#6b6f76" }
+    - { label: "STI",         z: [-0.4, 0.0],   color: "#9aa3ad" }
+    - { label: "Dielectric",  z: [0.0, 13.83],  color: "#c9dbe8" }
+    - { label: "Passivation", z: [13.83, 15.73], color: "#e4dcc6" }
+  # Thin metals are not drawn, but marked as reference lines on the z axis.
+  ticks:
+    - { label: "M1", z: 0.64 }
+    - { label: "M5", z: 5.18 }
+
+gf180mcu:
+  name: GlobalFoundries GF180MCU (180 nm)
+  # Source: official KLayout 2.5D stack, gf180mcu_fd_pv klayout/d25/gf180mcu.lyd25
+  # (5LM stack: Metal5 81/0 is the top metal). STI depth and passivation are nominal.
+  die_layer: null             # no boundary layer; the top cell bbox is the die
+  layers:
+    top_metal:       { gds: ["81/0", "81/4"], label: "Metal5", z: [5.76, 6.9525] }
+    top_metal_below: { gds: ["46/0", "46/4"], label: "Metal4", z: [4.31, 4.86] }
+    poly:            { gds: ["30/0", "30/4"], label: "Poly2",  z: [0.0, 0.2] }
+    diff:            { gds: ["22/0", "22/4"], label: "COMP",   z: [-0.35, 0.0] }
+  bands:
+    - { label: "Substrate",   z: [-1.0, -0.35],  color: "#6b6f76" }
+    - { label: "STI",         z: [-0.35, 0.0],   color: "#9aa3ad" }
+    - { label: "Dielectric",  z: [0.0, 6.9525],  color: "#c9dbe8" }
+    - { label: "Passivation", z: [6.9525, 8.5],  color: "#e4dcc6" }
+  ticks:
+    - { label: "M1", z: 0.86 }
+    - { label: "M3", z: 3.16 }
+
+sky130:
+  name: SkyWater SKY130 (130 nm)
+  # Source: SKY130 metal stack diagram (heights above substrate; poly drawn from the
+  # active surface). https://skywater-pdk.readthedocs.io/en/main/rules/assumptions.html
+  # STI depth and passivation are nominal.
+  die_layer: null             # die box given in chips.yaml (the seal ring/scribe extends past it)
+  layers:
+    top_metal:       { gds: ["72/20"], label: "met5", z: [5.3711, 6.6311] }
+    top_metal_below: { gds: ["71/20"], label: "met4", z: [4.0211, 4.8661] }
+    poly:            { gds: ["66/20"], label: "poly", z: [0.0, 0.18] }
+    diff:            { gds: ["65/20", "65/44"], label: "diff/tap", z: [-0.3262, 0.0] }
+  bands:
+    - { label: "Substrate",   z: [-1.0, -0.3262], color: "#6b6f76" }
+    - { label: "STI",         z: [-0.3262, 0.0],  color: "#9aa3ad" }
+    - { label: "Dielectric",  z: [0.0, 6.6311],   color: "#c9dbe8" }
+    - { label: "Passivation", z: [6.6311, 7.9],   color: "#e4dcc6" }
+  ticks:
+    - { label: "li1", z: 0.9361 }
+    - { label: "M1", z: 1.3761 }
+    - { label: "M3", z: 2.7861 }
