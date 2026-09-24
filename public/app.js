@@ -140,7 +140,10 @@ function buildMap(chip, tileIndex) {
   state.cursor = new CursorReadout({ position: "bottomright" }).addTo(map);
 
   // line + endpoints + zero marker
-  state.lineLayer = L.polyline([], { color: "#39c5ff", weight: 3, opacity: 0.95 }).addTo(map);
+  state.lineLayer = L.polyline([], { color: "#39c5ff", weight: 3, opacity: 0.95, interactive: false }).addTo(map);
+  // Invisible, wider copy of the line that can be grabbed to move the whole line.
+  state.lineGrab = L.polyline([], { weight: 16, opacity: 0, className: "line-grab" }).addTo(map);
+  state.lineGrab.on("mousedown", onLineGrab);
   state.previewLayer = L.polyline([], { color: "#39c5ff", weight: 2, dashArray: "6 4" }).addTo(map);
   state.ends = ["A", "B"].map((lbl, i) => {
     const m = L.marker([0, 0], {
@@ -275,8 +278,11 @@ function setMode(mode) {
   if (mode !== "draw-b") state.previewLayer.setLatLngs([]);
 }
 
-function snap(a, b, shift) {
-  if (!shift) return b;
+// Cross-section lines are always horizontal or vertical.
+function isHorizontal(l) { return Math.abs(l.x1 - l.x0) >= Math.abs(l.y1 - l.y0); }
+
+// Point b moved onto the horizontal or vertical through a, whichever is closer.
+function snapAxis(a, b) {
   return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
 }
 
@@ -286,7 +292,7 @@ function onMapClick(e) {
     state.drawStart = p;
     setMode("draw-b");
   } else if (state.mode === "draw-b") {
-    const b = snap(state.drawStart, p, e.originalEvent.shiftKey);
+    const b = snapAxis(state.drawStart, p);
     setMode(null);
     setLine({ x0: state.drawStart.x, y0: state.drawStart.y, x1: b.x, y1: b.y });
     $("#saved-lines").value = "";
@@ -301,20 +307,48 @@ function onMapMove(e) {
   state.cursor.update(p);
   moveCrosshair(e.containerPoint);
   if (state.mode === "draw-b") {
-    const b = snap(state.drawStart, p, e.originalEvent.shiftKey);
+    const b = snapAxis(state.drawStart, p);
     state.previewLayer.setLatLngs([toLatLng(state.drawStart.x, state.drawStart.y), toLatLng(b.x, b.y)]);
   }
 }
 
+// Dragging an end point only changes the length: it stays on the line's axis.
 function onEndDrag(i, e) {
   const p = fromLatLng(e.target.getLatLng());
   const l = { ...state.line };
   const other = i === 0 ? { x: l.x1, y: l.y1 } : { x: l.x0, y: l.y0 };
-  const q = snap(other, p, e.originalEvent && e.originalEvent.shiftKey);
+  const q = isHorizontal(l) ? { x: p.x, y: other.y } : { x: other.x, y: p.y };
   if (i === 0) { l.x0 = q.x; l.y0 = q.y; } else { l.x1 = q.x; l.y1 = q.y; }
-  if (q !== p) e.target.setLatLng(toLatLng(q.x, q.y));
+  e.target.setLatLng(toLatLng(q.x, q.y));
   setLine(l, { quiet: true });
   $("#saved-lines").value = "";
+}
+
+// Dragging the line itself moves it, keeping its length and direction.
+function onLineGrab(e) {
+  if (state.mode || !state.line) return;
+  L.DomEvent.stop(e);
+  const map = state.map;
+  map.dragging.disable();
+  const start = fromLatLng(e.latlng), orig = { ...state.line };
+  $("#map").classList.add("moving-line");
+  const move = ev => {
+    const p = fromLatLng(ev.latlng);
+    const dx = p.x - start.x, dy = p.y - start.y;
+    setLine({ x0: orig.x0 + dx, y0: orig.y0 + dy, x1: orig.x1 + dx, y1: orig.y1 + dy }, { quiet: true });
+  };
+  const up = () => {
+    map.off("mousemove", move);
+    document.removeEventListener("mouseup", up);
+    map.dragging.enable();
+    $("#map").classList.remove("moving-line");
+    if (state.line.x0 !== orig.x0 || state.line.y0 !== orig.y0) {
+      $("#saved-lines").value = "";
+      setLine(state.line);
+    }
+  };
+  map.on("mousemove", move);
+  document.addEventListener("mouseup", up);
 }
 
 function round3(v) { return Math.round(v * 1000) / 1000; }
@@ -325,10 +359,12 @@ function setLine(line, { fit = false, quiet = false } = {}) {
   const l = state.line;
   if (!l) {
     state.lineLayer.setLatLngs([]);
+    state.lineGrab.setLatLngs([]);
     state.ends.forEach(m => m.remove());
   } else {
     const a = toLatLng(l.x0, l.y0), b = toLatLng(l.x1, l.y1);
     state.lineLayer.setLatLngs([a, b]);
+    state.lineGrab.setLatLngs([a, b]);
     state.ends[0].setLatLng(a).addTo(state.map);
     state.ends[1].setLatLng(b).addTo(state.map);
     if (fit) state.map.fitBounds(L.latLngBounds(a, b).pad(0.3), { maxZoom: state.chip.max_zoom + 1 });
@@ -345,17 +381,25 @@ function updateLineInputs() {
   }
   if (!l) { $("#line-info").textContent = "No line yet."; return; }
   const dx = l.x1 - l.x0, dy = l.y1 - l.y0;
-  const len = Math.hypot(dx, dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
-  $("#line-info").innerHTML = `Length ${len.toFixed(3)} µm · angle ${ang.toFixed(2)}°<br>` +
+  const len = Math.hypot(dx, dy);
+  const dir = dx === 0 && dy === 0 ? "" : isHorizontal(l) ? " · horizontal" : " · vertical";
+  $("#line-info").innerHTML = `Length ${len.toFixed(3)} µm${dir}<br>` +
     `Absolute: (${l.x0.toFixed(3)}, ${l.y0.toFixed(3)}) → (${l.x1.toFixed(3)}, ${l.y1.toFixed(3)}) µm`;
 }
 
-function onLineInput() {
+// Typed coordinates. On a horizontal line both Y boxes are one value (and X on a
+// vertical line), so editing either moves the line; the result is kept on an axis.
+function onLineInput(e) {
   const v = id => parseFloat($(`#${id}`).value);
-  const vals = ["x0", "y0", "x1", "y1"].map(v);
-  if (vals.some(Number.isNaN)) return;
-  const z = state.zero;
-  setLine({ x0: vals[0] + z.x, y0: vals[1] + z.y, x1: vals[2] + z.x, y1: vals[3] + z.y });
+  const [x0, y0, x1, y1] = ["x0", "y0", "x1", "y1"].map(v);
+  if ([x0, y0, x1, y1].some(Number.isNaN)) return;
+  const z = state.zero, id = e.target.id;
+  const l = { x0: x0 + z.x, y0: y0 + z.y, x1: x1 + z.x, y1: y1 + z.y };
+  const prev = state.line;
+  if (prev && isHorizontal(prev) && (id === "y0" || id === "y1")) l.y0 = l.y1 = v(id) + z.y;
+  else if (prev && !isHorizontal(prev) && (id === "x0" || id === "x1")) l.x0 = l.x1 = v(id) + z.x;
+  const b = snapAxis({ x: l.x0, y: l.y0 }, { x: l.x1, y: l.y1 });
+  setLine({ x0: l.x0, y0: l.y0, x1: b.x, y1: b.y });
   $("#saved-lines").value = "";
 }
 
