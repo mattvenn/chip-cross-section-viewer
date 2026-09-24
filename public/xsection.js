@@ -14,7 +14,7 @@ class CrossSection {
     this.onDblClick = onDblClick || (() => {});
     this.data = null;     // { length, offset, layers: [{..., intervals}] }
     this.view = null;     // [s0, s1] visible axis range
-    this.pad = { l: 78, r: 96, t: 14, b: 34 };  // right margin holds the depth dimension
+    this.pad = { l: 78, r: 118, t: 14, b: 34 };  // right margin holds the depth dimension
     this._setupZ();
     this._bindEvents();
     new ResizeObserver(() => this.draw()).observe(canvas.parentElement);
@@ -229,11 +229,13 @@ class CrossSection {
     this._drawDepth(ctx, x1, fg, muted);
   }
 
-  // Dimension from the top surface down to the transistors (silicon surface, z = 0).
+  // Cut depth: from the top surface down through the transistors (bottom of the
+  // STI). A small tick marks where the transistors start (silicon surface, z = 0).
   _drawDepth(ctx, x1, fg, muted) {
     const d = this.chip.depth;
     if (!d) return;
-    const x = x1 + 16, yTop = this.zToY(d.top), yBot = this.zToY(0);
+    const bottom = d.bottom ?? 0;
+    const x = x1 + 16, yTop = this.zToY(d.top), yBot = this.zToY(bottom), ySi = this.zToY(0);
     ctx.save();
     ctx.strokeStyle = fg; ctx.fillStyle = fg; ctx.lineWidth = 1;
     // extension lines from the plot edge
@@ -245,16 +247,18 @@ class CrossSection {
     for (const [y, dir] of [[yTop, 1], [yBot, -1]]) {
       ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x - 3.5, y + 7 * dir); ctx.lineTo(x + 4.5, y + 7 * dir); ctx.closePath(); ctx.fill();
     }
-    // label, centred on the dimension line
-    const yMid = (yTop + yBot) / 2;
+    // where the transistors start
+    ctx.beginPath(); ctx.moveTo(x - 4, ySi + 0.5); ctx.lineTo(x + 5, ySi + 0.5); ctx.stroke();
+    const est = d.estimate ? "≈ " : "";
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const yMid = (yTop + ySi) / 2;
     ctx.font = "600 12px system-ui, sans-serif";
-    ctx.fillText(`${d.estimate ? "≈ " : ""}${d.top.toFixed(2)} µm`, x + 8, yMid - 14);
+    ctx.fillText(`${est}${(d.top - bottom).toFixed(2)} µm`, x + 8, yMid - 20);
     ctx.font = "11px system-ui, sans-serif";
     ctx.fillStyle = muted;
-    ctx.fillText("surface to", x + 8, yMid + 2);
-    ctx.fillText("transistors", x + 8, yMid + 15);
-    if (d.estimate) ctx.fillText("(estimate)", x + 8, yMid + 28);
+    const lines = ["cut depth", "through the", "transistors"].concat(d.estimate ? ["(estimate)"] : []);
+    lines.forEach((t, i) => ctx.fillText(t, x + 8, yMid - 5 + 13 * i));
+    ctx.fillText(`starts at ${est}${d.top.toFixed(2)}`, x + 8, ySi - 10);
     ctx.restore();
   }
 }

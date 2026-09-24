@@ -28,9 +28,10 @@ sg13g2:
   ticks:
     - { label: "M1", z: 0.64 }
     - { label: "M5", z: 5.18 }
-  # Depth from the top surface (passivation over the top metal) down to the
-  # transistors (silicon surface, z = 0), shown as a dimension on the cross-section.
-  depth: { top: 15.73, estimate: false }   # TM2 top 13.83 + TPASS1 1.5 + TPASS2 0.4
+  # Cut depth shown on the cross-section: from the top surface (passivation over
+  # the top metal) down to the bottom of the transistors (bottom of the STI, which
+  # is deeper than the source/drain junctions). The transistors start at z = 0.
+  depth: { top: 15.73, bottom: -0.4, estimate: false }   # TM2 top 13.83 + TPASS1 1.5 + TPASS2 0.4; TSTI 0.4
 
 gf180mcu:
   name: GlobalFoundries GF180MCU (180 nm)
@@ -50,7 +51,7 @@ gf180mcu:
   ticks:
     - { label: "M1", z: 0.86 }
     - { label: "M3", z: 3.16 }
-  depth: { top: 8.5, estimate: true }      # passivation thickness not found in the PDK: estimate
+  depth: { top: 8.5, bottom: -0.35, estimate: true }   # passivation and STI depth not found in the PDK: estimates
 
 sky130:
   name: SkyWater SKY130 (130 nm)
@@ -58,20 +59,20 @@ sky130:
   # active surface). https://skywater-pdk.readthedocs.io/en/main/rules/assumptions.html
   # Passivation: 0.6 µm over met5 (passv_thickness in efabless sky130_klayout_pdk
   # tech/sky130/xsect/sky130.xs). That script also has an optional 6.1 µm polyimide
-  # layer on top, not included here. STI depth is nominal.
+  # layer on top, not included here. STI depth 0.3 µm (sti_depth, same script).
   die_layer: null             # die box given in chips.yaml (the seal ring/scribe extends past it)
   layers:
     top_metal:       { gds: ["72/20"], label: "met5", z: [5.3711, 6.6311] }
     top_metal_below: { gds: ["71/20"], label: "met4", z: [4.0211, 4.8661] }
     poly:            { gds: ["66/20"], label: "poly", z: [0.0, 0.18] }
-    diff:            { gds: ["65/20", "65/44"], label: "diff/tap", z: [-0.3262, 0.0] }
+    diff:            { gds: ["65/20", "65/44"], label: "diff/tap", z: [-0.3, 0.0] }
   bands:
-    - { label: "Substrate",   z: [-1.0, -0.3262], color: "#6b6f76" }
-    - { label: "STI",         z: [-0.3262, 0.0],  color: "#9aa3ad" }
+    - { label: "Substrate",   z: [-1.0, -0.3],   color: "#6b6f76" }
+    - { label: "STI",         z: [-0.3, 0.0],    color: "#9aa3ad" }
     - { label: "Dielectric",  z: [0.0, 6.6311],   color: "#c9dbe8" }
     - { label: "Passivation", z: [6.6311, 7.2311], color: "#e4dcc6" }
   ticks:
     - { label: "li1", z: 0.9361 }
     - { label: "M1", z: 1.3761 }
     - { label: "M3", z: 2.7861 }
-  depth: { top: 7.2311, estimate: false }  # met5 top 6.6311 + passivation 0.6 (no polyimide)
+  depth: { top: 7.2311, bottom: -0.3, estimate: false }  # met5 top 6.6311 + passivation 0.6 (no polyimide); sti_depth 0.3
