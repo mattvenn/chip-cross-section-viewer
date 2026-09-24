@@ -83,7 +83,7 @@ async function openViewer(chip, fromHash = {}) {
     new Set(await fetch(`data/${chip.id}/tiles/${l.key}/index.json`).then(r => r.json()))])));
   buildMap(chip, tileIndex);
   buildLayerList(chip);
-  if (!state.xs) state.xs = new CrossSection($("#xs-canvas"), $("#xs-tip"), chip, { onHover: showHoverOnMap });
+  if (!state.xs) state.xs = new CrossSection($("#xs-canvas"), $("#xs-tip"), chip, { onHover: showHoverOnMap, onDblClick: showXsSpotOnMap });
   else state.xs.setChip(chip);
   state.xsLayers = null;
   updateZeroInfo();
@@ -469,6 +469,18 @@ function redrawXs(keepView = true) {
   }
 }
 
+// Centre the map on a point of the line and zoom so the map shows the same
+// stretch of the line as the cross-section (span µm along the line).
+function showXsSpotOnMap(t, span) {
+  const l = state.line, map = state.map;
+  if (!l) return;
+  const size = map.getSize();
+  const px = state.cut.axis === "h" ? size.x : size.y;
+  const c = state.chip, res = c.nm_per_px / 1000;
+  const zoom = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), c.max_zoom - Math.log2(span / px / res)));
+  map.setView(toLatLng(l.x0 + t * (l.x1 - l.x0), l.y0 + t * (l.y1 - l.y0)), zoom);
+}
+
 function showHoverOnMap(t) {
   const l = state.line;
   if (t == null || !l) { state.hoverMarker.remove(); return; }
@@ -609,6 +621,7 @@ const actions = {
   "clear-line": () => { setMode(null); setCut(null); showSavedSelection(""); },
   "set-zero": () => setMode(state.mode === "zero" ? null : "zero"),
   "reset-zero": () => setZero({ x: 0, y: 0 }),
+  "xs-full": () => state.xs.resetView(),
   "save-line": saveLine,
   "rename-line": renameLine,
   "download-lines": downloadLines,
