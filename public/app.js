@@ -517,7 +517,22 @@ $("#opacity").addEventListener("input", e => {
   applyLayerVisibility();
 });
 
+// version.json is written by the deploy workflow; a local copy doesn't have one.
+async function showVersion() {
+  const el = $("#version");
+  try {
+    const r = await fetch("version.json", { cache: "no-cache" });
+    if (!r.ok) throw new Error();
+    const v = await r.json();
+    el.innerHTML = `Version <a href="${v.url}" target="_blank" rel="noopener"><code>${escapeHtml(v.sha.slice(0, 7))}</code></a>` +
+      ` · ${escapeHtml(v.date.slice(0, 16).replace("T", " "))} UTC · ${escapeHtml(v.subject)}`;
+  } catch {
+    el.textContent = "Version: local development copy (not deployed)";
+  }
+}
+
 (async function init() {
+  showVersion();
   state.chips = await fetch("data/chips.json", { cache: "no-cache" }).then(r => r.json());
   const h = parseHash();
   const chip = state.chips.find(c => c.id === h.chip);

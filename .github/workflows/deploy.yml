@@ -53,6 +53,8 @@ jobs:
           done
       - name: Stamp asset versions so browsers fetch new code after a deploy
         run: sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" public/index.html
+      - name: Write version.json (shown at the bottom of the chip picker)
+        run: python3 build/write_version.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public

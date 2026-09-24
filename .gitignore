@@ -6,3 +6,4 @@ public/data/*/vec/
 public/data/*/thumb.png
 public/data/chips.json
 __pycache__/
+public/version.json
