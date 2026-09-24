@@ -370,7 +370,7 @@ function setCut(cut, { quiet = false, newLine = false, show = false } = {}) {
     }
   }
   updateLineInputs();
-  if (!quiet) { updateXs({ fitMap: newLine || show }); updateHash(); }
+  if (!quiet) { updateXs({ newLine }); updateHash(); }
 }
 
 // force: also overwrite the box while it has focus (e.g. after the zero changed)
@@ -415,7 +415,9 @@ function updateZeroInfo() {
 
 let xsToken = 0;
 
-async function updateXs({ fitMap = false } = {}) {
+// A moved line keeps the cross-section's zoom: lines on the same axis share the
+// same along-line coordinates. A new line, or a change of axis, fits it to the map.
+async function updateXs({ newLine = false } = {}) {
   const l = state.line;
   if (!l) { state.xs.setData(null); $("#xs-status").textContent = ""; return; }
   const token = ++xsToken;
@@ -426,8 +428,10 @@ async function updateXs({ fitMap = false } = {}) {
   if (token !== xsToken) return;
   state.xsLayers = layers;
   $("#xs-status").textContent = "";
-  redrawXs(false);
-  if (fitMap) fitXsToMap();
+  const keep = !newLine && state.xsAxis === state.cut.axis && !!state.xs.view;
+  state.xsAxis = state.cut.axis;
+  redrawXs(keep);
+  if (!keep) fitXsToMap();
 }
 
 // Show the stretch of the line that is visible on the map (double-click shows all of it).
