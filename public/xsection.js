@@ -234,5 +234,5 @@ function fmtNum(v, step) {
 }
 
 function fmtUm(v) {
-  return `${v.toFixed(3)} µm`;
+  return `${(Math.abs(v) < 0.0005 ? 0 : v).toFixed(3)} µm`;
 }

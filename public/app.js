@@ -255,7 +255,7 @@ const CursorReadout = L.Control.extend({
   },
   update(p) {
     this._div.textContent = p
-      ? `X ${(p.x - state.zero.x).toFixed(3)}  Y ${(p.y - state.zero.y).toFixed(3)} µm`
+      ? `X ${fmt3(p.x - state.zero.x)}  Y ${fmt3(p.y - state.zero.y)} µm`
       : "X —  Y — µm";
   },
 });
@@ -348,6 +348,9 @@ function onLineGrab(e) {
 
 function round3(v) { return Math.round(v * 1000) / 1000; }
 
+// µm with 3 decimals, without "-0.000" from rounding noise
+function fmt3(v) { return (Math.abs(v) < 0.0005 ? 0 : v).toFixed(3); }
+
 // quiet: update the drawing and inputs only (used while dragging)
 // newLine: open the cross-section on the part of the chip visible on the map
 // show: pan the map so the line is in view
@@ -380,12 +383,12 @@ function updateLineInputs({ force = false } = {}) {
   $("#pos-label").textContent = `${axisName} (µm)`;
   const el = $("#pos");
   el.disabled = !c;
-  const rel = c ? (c.pos - (c.axis === "h" ? z.y : z.x)).toFixed(3) : "";
+  const rel = c ? fmt3(c.pos - (c.axis === "h" ? z.y : z.x)) : "";
   if (force || document.activeElement !== el) el.value = rel;
   if (!c) { $("#line-info").textContent = "No line yet."; return; }
   const span = c.axis === "h" ? `full width, ${state.chip.width_um} µm` : `full height, ${state.chip.height_um} µm`;
   $("#line-info").innerHTML = `${c.axis === "h" ? "Horizontal" : "Vertical"} line at ${axisName} = ${rel} µm` +
-    `<br>Absolute ${axisName} = ${c.pos.toFixed(3)} µm · ${span}`;
+    `<br>Absolute ${axisName} = ${fmt3(c.pos)} µm · ${span}`;
 }
 
 function onLineInput() {
@@ -396,8 +399,10 @@ function onLineInput() {
   showSavedSelection("");
 }
 
+// The zero is kept on the die: a click just outside it lands on the nearest edge.
 function setZero(p) {
-  state.zero = { x: round3(p.x), y: round3(p.y) };
+  const { width_um: W, height_um: H } = state.chip;
+  state.zero = { x: round3(Math.min(Math.max(p.x, 0), W)), y: round3(Math.min(Math.max(p.y, 0), H)) };
   storage.set(`zero:${state.chip.id}`, state.zero);
   state.zeroMarker.setLatLng(toLatLng(state.zero.x, state.zero.y));
   updateZeroInfo();
@@ -408,7 +413,7 @@ function setZero(p) {
 
 function updateZeroInfo() {
   const z = state.zero;
-  $("#zero-info").textContent = z.x === 0 && z.y === 0 ? "die corner (0, 0)" : `(${z.x.toFixed(3)}, ${z.y.toFixed(3)}) µm`;
+  $("#zero-info").textContent = z.x === 0 && z.y === 0 ? "die corner (0, 0)" : `(${fmt3(z.x)}, ${fmt3(z.y)}) µm`;
 }
 
 // ---------------------------------------------------------------- cross-section
