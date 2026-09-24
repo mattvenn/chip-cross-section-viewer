@@ -1,6 +1,21 @@
 // Vector chunk loading, polygon decoding and line/polygon intersection.
 // Coordinates are µm relative to the die's lower-left corner.
 
+// Fetch JSON, retrying a few times on network errors and HTTP errors
+// (a cross-section can need hundreds of files; one hiccup shouldn't break it).
+async function fetchJson(url, { tries = 3, ...opts } = {}) {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url, opts);
+      if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+      return await r.json();
+    } catch (err) {
+      if (i + 1 >= tries) throw err;
+      await new Promise(res => setTimeout(res, 400 * 2 ** i));
+    }
+  }
+}
+
 class VectorStore {
   constructor(chip) {
     this.chip = chip;
@@ -12,9 +27,10 @@ class VectorStore {
 
   async loadIndex(layer) {
     if (!this.index[layer]) {
-      this.index[layer] = fetch(`${this.base}/${layer}/index.json`)
-        .then(r => r.ok ? r.json() : [])
-        .then(list => new Set(list.map(([x, y]) => `${x}_${y}`)));
+      // A failed load is not cached, so the next attempt fetches it again.
+      this.index[layer] = fetchJson(`${this.base}/${layer}/index.json`)
+        .then(list => new Set(list.map(([x, y]) => `${x}_${y}`)))
+        .catch(err => { delete this.index[layer]; throw err; });
     }
     return this.index[layer];
   }
@@ -44,9 +60,9 @@ class VectorStore {
     if (!idx.has(k)) return [];
     const key = `${layer}/${k}`;
     if (!this.cache[key]) {
-      this.cache[key] = fetch(`${this.base}/${layer}/${k}.json`)
-        .then(r => r.json())
-        .then(raw => VectorStore.decode(raw, cx, cy, this.cellUm));
+      this.cache[key] = fetchJson(`${this.base}/${layer}/${k}.json`)
+        .then(raw => VectorStore.decode(raw, cx, cy, this.cellUm))
+        .catch(err => { delete this.cache[key]; throw err; });
     }
     return this.cache[key];
   }

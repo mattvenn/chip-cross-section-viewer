@@ -129,6 +129,7 @@ select { width: 100%; }
 .xs-head { display: flex; gap: 12px; align-items: baseline; padding: 6px 12px 0; flex-wrap: wrap; }
 .xs-help { margin-left: auto; }
 .small-btn { padding: 2px 8px; font-size: 12px; }
+.error { color: #d0303a; }
 .xs { position: relative; flex: 1; min-height: 0; }
 .xs canvas { display: block; touch-action: none; cursor: grab; }
 .xs-tip {

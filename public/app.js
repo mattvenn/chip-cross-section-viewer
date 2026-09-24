@@ -80,7 +80,7 @@ async function openViewer(chip, fromHash = {}) {
   $("#opacity").value = state.opacity;
 
   const tileIndex = Object.fromEntries(await Promise.all(chip.layers.map(async l => [l.key,
-    new Set(await fetch(`data/${chip.id}/tiles/${l.key}/index.json`).then(r => r.json()))])));
+    new Set(await fetchJson(`data/${chip.id}/tiles/${l.key}/index.json`))])));
   buildMap(chip, tileIndex);
   buildLayerList(chip);
   if (!state.xs) state.xs = new CrossSection($("#xs-canvas"), $("#xs-tip"), chip, { onHover: showHoverOnMap, onDblClick: showXsSpotOnMap });
@@ -427,9 +427,18 @@ async function updateXs({ newLine = false } = {}) {
   if (!l) { state.xs.setData(null); $("#xs-status").textContent = ""; return; }
   const token = ++xsToken;
   $("#xs-status").textContent = "loading…";
-  const layers = await Promise.all(state.chip.layers.map(async ly => ({
-    ...ly, intervals: await state.store.intervals(ly.key, l.x0, l.y0, l.x1, l.y1),
-  })));
+  let layers;
+  try {
+    layers = await Promise.all(state.chip.layers.map(async ly => ({
+      ...ly, intervals: await state.store.intervals(ly.key, l.x0, l.y0, l.x1, l.y1),
+    })));
+  } catch (err) {
+    if (token !== xsToken) return;
+    console.error("cross-section data failed to load:", err);
+    $("#xs-status").innerHTML = `<span class="error">Couldn't load the cross-section data.</span> ` +
+      `<button class="small-btn" data-action="xs-retry">Retry</button>`;
+    return;
+  }
   if (token !== xsToken) return;
   state.xsLayers = layers;
   $("#xs-status").textContent = "";
@@ -491,9 +500,11 @@ function showHoverOnMap(t) {
 
 async function loadSavedLines() {
   try {
-    const r = await fetch(`data/${state.chip.id}/lines.json`, { cache: "no-cache" });
-    state.fileLines = r.ok ? await r.json() : [];
-  } catch { state.fileLines = []; }
+    state.fileLines = await fetchJson(`data/${state.chip.id}/lines.json`, { cache: "no-cache" });
+  } catch (err) {
+    console.error("saved lines failed to load:", err);
+    state.fileLines = [];
+  }
   // drop local lines (new or renamed) once the file contains exactly the same line
   const sameLine = l => JSON.stringify([l.id, l.name, l.axis, l.pos, l.x0, l.y0, l.x1, l.y1, l.note || ""]);
   const inFile = new Set(state.fileLines.map(sameLine));
@@ -622,6 +633,7 @@ const actions = {
   "set-zero": () => setMode(state.mode === "zero" ? null : "zero"),
   "reset-zero": () => setZero({ x: 0, y: 0 }),
   "xs-full": () => state.xs.resetView(),
+  "xs-retry": () => updateXs(),
   "save-line": saveLine,
   "rename-line": renameLine,
   "download-lines": downloadLines,
@@ -657,7 +669,7 @@ async function showVersion() {
 
 (async function init() {
   showVersion();
-  state.chips = await fetch("data/chips.json", { cache: "no-cache" }).then(r => r.json());
+  state.chips = await fetchJson("data/chips.json", { cache: "no-cache" });
   const h = parseHash();
   const chip = state.chips.find(c => c.id === h.chip);
   if (chip) openViewer(chip, h);
