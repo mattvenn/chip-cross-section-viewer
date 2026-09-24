@@ -37,6 +37,8 @@ gf180mcu:
   name: GlobalFoundries GF180MCU (180 nm)
   # Source: official KLayout 2.5D stack, gf180mcu_fd_pv klayout/d25/gf180mcu.lyd25
   # (5LM stack: Metal5 81/0 is the top metal). STI depth and passivation are nominal.
+  # Polyimide: we're fairly sure the chips have it, but its thickness isn't in the
+  # open PDK; assume 6.1 µm like Sky130 so the cut depth errs deep.
   die_layer: null             # no boundary layer; the top cell bbox is the die
   layers:
     top_metal:       { gds: ["81/0", "81/4"], label: "Metal5", z: [5.76, 6.9525] }
@@ -48,10 +50,11 @@ gf180mcu:
     - { label: "STI",         z: [-0.35, 0.0],   color: "#9aa3ad" }
     - { label: "Dielectric",  z: [0.0, 6.9525],  color: "#c9dbe8" }
     - { label: "Passivation", z: [6.9525, 8.5],  color: "#e4dcc6" }
+    - { label: "Polyimide",   z: [8.5, 14.6],    color: "#e8c98e" }
   ticks:
     - { label: "M1", z: 0.86 }
     - { label: "M3", z: 3.16 }
-  depth: { top: 8.5, bottom: -0.35, estimate: true }   # passivation and STI depth not found in the PDK: estimates
+  depth: { top: 14.6, bottom: -0.35, estimate: true, note: "assumes polyimide" }   # Metal5 top 6.95 + passivation ~1.55 + polyimide 6.1 (estimates); STI ~0.35
 
 sky130:
   name: SkyWater SKY130 (130 nm)

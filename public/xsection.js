@@ -251,15 +251,16 @@ class CrossSection {
     ctx.beginPath(); ctx.moveTo(x - 4, ySi + 0.5); ctx.lineTo(x + 5, ySi + 0.5); ctx.stroke();
     const est = d.estimate ? "≈ " : "";
     ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    const yMid = (yTop + ySi) / 2;
+    // label block from the top of the dimension, clear of the "starts at" label
+    const maxW = this.w - x - 12;
+    const notes = [d.estimate && "estimate", d.note].filter(Boolean).join(", ");
+    const lines = ["cut depth", "through the", "transistors"].concat(notes ? wrapText(ctx, `(${notes})`, maxW) : []);
+    let y = yTop + 16;
     ctx.font = "600 12px system-ui, sans-serif";
-    ctx.fillText(`${est}${(d.top - bottom).toFixed(2)} µm`, x + 8, yMid - 20);
+    ctx.fillText(`${est}${(d.top - bottom).toFixed(2)} µm`, x + 8, y);
     ctx.font = "11px system-ui, sans-serif";
     ctx.fillStyle = muted;
-    const maxW = this.w - x - 12;
-    const lines = ["cut depth", "through the", "transistors"].concat(
-      d.estimate ? ["(estimate)"] : [], d.note ? wrapText(ctx, `(${d.note})`, maxW) : []);
-    lines.forEach((t, i) => ctx.fillText(t, x + 8, yMid - 5 + 13 * i));
+    for (const t of lines) { y += 13; ctx.fillText(t, x + 8, y); }
     ctx.fillText(`starts at ${est}${d.top.toFixed(2)}`, x + 8, ySi - 10);
     ctx.restore();
   }
