@@ -55,4 +55,4 @@ for c in tt02 ttgf0p2 ttihp25b; do .venv/bin/python build/build_chip.py $c; done
 
 Saved cross-sections: draw a line, "Save current line…", then "Download lines.json" and commit it as `public/data/<chip>/lines.json`. Coordinates in that file are absolute µm from the die's lower-left corner.
 
-`.github/workflows/deploy.yml` rebuilds the data and publishes `public/` to GitHub Pages on push to `main`.
+`.github/workflows/deploy.yml` publishes `public/` to GitHub Pages on push to `main`. The generated chip data is cached, so it is only rebuilt (~15 min) when `build/*.py` or `build/*.yaml` change; other pushes (viewer code, `lines.json`) deploy in a couple of minutes.

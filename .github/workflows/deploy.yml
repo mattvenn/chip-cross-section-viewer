@@ -19,16 +19,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Generated chip data only depends on the build scripts and config (which
+      # includes the layout URLs), so reuse it unless one of those changed.
+      # lines.json is deliberately not cached: it always comes from the repo.
+      - name: Restore generated chip data
+        id: data
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/data/chips.json
+            public/data/*/tiles
+            public/data/*/vec
+            public/data/*/thumb.png
+          key: chipdata-${{ hashFiles('build/build_chip.py', 'build/fetch.py', 'build/*.yaml', 'build/requirements.txt') }}
       - uses: actions/setup-python@v5
+        if: steps.data.outputs.cache-hit != 'true'
         with:
           python-version: "3.12"
       - uses: actions/cache@v4
+        if: steps.data.outputs.cache-hit != 'true'
         with:
           path: build/cache
           key: layouts-${{ hashFiles('build/chips.yaml') }}
       - run: pip install -r build/requirements.txt
+        if: steps.data.outputs.cache-hit != 'true'
       - run: python build/fetch.py
+        if: steps.data.outputs.cache-hit != 'true'
       - name: Build chip data
+        if: steps.data.outputs.cache-hit != 'true'
         run: |
           for chip in $(python -c "import yaml; print(' '.join(yaml.safe_load(open('build/chips.yaml'))['chips']))"); do
             python build/build_chip.py "$chip"
