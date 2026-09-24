@@ -159,8 +159,23 @@ function buildMap(chip, tileIndex) {
   state.hoverMarker = L.circleMarker([0, 0], { radius: 6, color: "#fff", weight: 2, fillColor: "#ff5ab4", fillOpacity: 1, interactive: false });
 
   map.on("click", onMapClick);
+  // Full-width/height crosshair following the mouse, for lining features up.
+  // Leaflet's map.remove() leaves extra children in the container, so drop the old one.
+  const old = map.getContainer().querySelector(".guide-lines");
+  if (old) old.remove();
+  state.crosshair = L.DomUtil.create("div", "guide-lines", map.getContainer());
+  state.crosshair.innerHTML = `<div class="ch-h"></div><div class="ch-v"></div>`;
+  state.crosshair.hidden = true;
+
   map.on("mousemove", onMapMove);
-  map.on("mouseout", () => state.cursor.update(null));
+  map.on("mouseout", () => { state.cursor.update(null); state.crosshair.hidden = true; });
+}
+
+function moveCrosshair(pt) {
+  const ch = state.crosshair;
+  ch.hidden = false;
+  ch.firstChild.style.transform = `translateY(${pt.y}px)`;
+  ch.lastChild.style.transform = `translateX(${pt.x}px)`;
 }
 
 // chip µm <-> Leaflet latlng
@@ -284,6 +299,7 @@ function onMapClick(e) {
 function onMapMove(e) {
   const p = fromLatLng(e.latlng);
   state.cursor.update(p);
+  moveCrosshair(e.containerPoint);
   if (state.mode === "draw-b") {
     const b = snap(state.drawStart, p, e.originalEvent.shiftKey);
     state.previewLayer.setLatLngs([toLatLng(state.drawStart.x, state.drawStart.y), toLatLng(b.x, b.y)]);
