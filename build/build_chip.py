@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build viewer data for one chip.
 
-    python build/build_chip.py ttihp25b [--skip-tiles] [--skip-vec]
+    python build/build_chip.py ttihp25b [--skip-tiles] [--skip-vec] [--meta-only]
 
 Writes into public/data/<chip>/:
   tiles/<layer>/{z}/{x}/{y}.png   transparent tiles in the layer colour
@@ -252,6 +252,8 @@ def main():
     ap.add_argument("chip")
     ap.add_argument("--skip-tiles", action="store_true")
     ap.add_argument("--skip-vec", action="store_true")
+    ap.add_argument("--meta-only", action="store_true",
+                    help="only refresh this chip's entry in chips.json (e.g. after editing its name or links)")
     args = ap.parse_args()
 
     chips_cfg, pdks = load_config()
@@ -282,16 +284,18 @@ def main():
     ts = render["tile_size"]
     max_zoom = math.ceil(math.log2(max(die.width(), die.height()) * 1000 / nm / ts))
 
-    if not args.skip_tiles:
-        build_tiles(path, die, layers, render, out_dir, max_zoom)
-    if not args.skip_vec:
-        build_vectors(layout, top, die, layers, render, out_dir)
-    build_thumb(path, die, layers, out_dir)
+    if not args.meta_only:
+        if not args.skip_tiles:
+            build_tiles(path, die, layers, render, out_dir, max_zoom)
+        if not args.skip_vec:
+            build_vectors(layout, top, die, layers, render, out_dir)
+        build_thumb(path, die, layers, out_dir)
 
     entry = {
         "id": args.chip,
         "name": chip["name"],
         "repo": chip.get("repo"),
+        "page": chip.get("page"),
         "pdk": chip["pdk"],
         "pdk_name": pdk["name"],
         "top_cell": top.name,

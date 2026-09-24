@@ -34,12 +34,13 @@ function renderPicker() {
   const cards = $("#chip-cards");
   cards.innerHTML = "";
   for (const c of state.chips) {
-    const b = document.createElement("button");
-    b.className = "card";
-    b.innerHTML = `<img src="${c.thumb}" alt=""><span class="card-name">${c.name}</span>
-      <span class="muted small">${c.pdk_name}<br>${fmtDie(c)}</span>`;
-    b.onclick = () => openConfirm(c);
-    cards.appendChild(b);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<button class="card-main"><img src="${c.thumb}" alt=""><span class="card-name">${escapeHtml(c.name)}</span>
+      <span class="muted small">${escapeHtml(c.pdk_name)}<br>${fmtDie(c)}</span></button>
+      ${c.page ? `<a class="small" href="${c.page}" target="_blank" rel="noopener">Tiny Tapeout page ↗</a>` : ""}`;
+    card.querySelector("button").onclick = () => openConfirm(c);
+    cards.appendChild(card);
   }
   show("picker");
 }
@@ -52,6 +53,7 @@ function openConfirm(c) {
     <dt>Process</dt><dd>${c.pdk_name}</dd>
     <dt>Die size</dt><dd>${fmtDie(c)}</dd>
     <dt>Top cell</dt><dd><code>${c.top_cell}</code></dd>
+    ${c.page ? `<dt>Chip page</dt><dd><a href="${c.page}" target="_blank" rel="noopener">${c.page.replace("https://", "")}</a></dd>` : ""}
     ${c.repo ? `<dt>Source</dt><dd><a href="${c.repo}" target="_blank" rel="noopener">${c.repo.replace("https://", "")}</a></dd>` : ""}`;
   show("confirm");
 }
@@ -67,6 +69,8 @@ async function openViewer(chip, fromHash = {}) {
   show("viewer");
   $("#chip-title").textContent = chip.name;
   $("#chip-sub").textContent = `${chip.pdk_name} · ${fmtDie(chip)}`;
+  $("#chip-page").hidden = !chip.page;
+  if (chip.page) $("#chip-page").href = chip.page;
   state.store = new VectorStore(chip);
   state.zero = fromHash.zero || storage.get(`zero:${chip.id}`, { x: 0, y: 0 });
   state.localLines = storage.get(`lines:${chip.id}`, []);

@@ -15,6 +15,7 @@ render:
 # Optional per chip:
 #   die: [x0, y0, x1, y1]   die outline in µm, when the PDK's die_layer can't be used
 #   encoding: base64        the URL serves base64 (googlesource ?format=TEXT)
+#   page: <url>             the chip's page on tinytapeout.com (linked from the viewer)
 chips:
   tt02:
     name: "Tiny Tapeout 02"
@@ -25,6 +26,7 @@ chips:
     file: tt02.oas
     die: [0, 0, 3600, 5200]
     repo: https://github.com/TinyTapeout/tinytapeout-02
+    page: https://tinytapeout.com/chips/tt02/
 
   ttgf0p2:
     name: "Tiny Tapeout GF 0.2 (TTP2)"
@@ -32,6 +34,7 @@ chips:
     url: https://github.com/TinyTapeout/tinytapeout-gf-0p2/releases/download/tapeout-ws2512/tt_gf_wrapper.oas.tt_gf_wrapper.precheck.20251217_132152.output.gds
     file: ttgf0p2.gds
     repo: https://github.com/TinyTapeout/tinytapeout-gf-0p2
+    page: https://tinytapeout.com/chips/ttgf0p2/
 
   ttihp25b:
     name: "Tiny Tapeout IHP 25b"
@@ -39,3 +42,4 @@ chips:
     url: https://github.com/TinyTapeout/tinytapeout-ihp-25b/releases/download/tapeout-2509/FMD_QNC_TTIHP25b.oas
     file: ttihp25b.oas
     repo: https://github.com/TinyTapeout/tinytapeout-ihp-25b
+    page: https://tinytapeout.com/chips/ttihp25b/

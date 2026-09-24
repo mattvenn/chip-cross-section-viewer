@@ -60,12 +60,28 @@ select { width: 100%; }
 .screen { min-height: 100%; }
 .picker-inner, .confirm-inner { max-width: 1100px; margin: 0 auto; padding: 32px 16px; }
 .lede { color: var(--muted); margin: 0 0 24px; }
+.brand-head { display: flex; align-items: center; gap: 14px; margin-bottom: .5rem; }
+.brand-head h1 { margin: 0; }
+.tt-logo-link { display: inline-flex; flex: none; }
+.tt-logo {
+  display: inline-block; width: 48px; aspect-ratio: 1; background: var(--fg);
+  -webkit-mask: url(ttlogo.svg) center / contain no-repeat;
+  mask: url(ttlogo.svg) center / contain no-repeat;
+}
+.tt-logo.small { width: 28px; }
+.topbar .title { align-items: center; }
 .version { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .card {
-  display: flex; flex-direction: column; gap: 6px; text-align: left;
-  padding: 12px; background: var(--panel); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
 }
+.card:hover { border-color: var(--accent); }
+.card-main {
+  display: flex; flex-direction: column; gap: 6px; text-align: left;
+  padding: 0; border: none; background: none;
+}
+.card > a { align-self: flex-start; }
 .card img { width: 100%; aspect-ratio: 3 / 4; object-fit: contain; background: #15171a; border-radius: 6px; }
 .card-name { font-weight: 600; font-size: 15px; }
 .confirm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; margin-top: 16px; align-items: start; }

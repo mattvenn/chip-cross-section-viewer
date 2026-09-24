@@ -13,7 +13,10 @@
 <!-- Step 1/2: choose and confirm the chip -->
 <section id="picker" class="screen" hidden>
   <div class="picker-inner">
-    <h1>Chip cross-section viewer</h1>
+    <div class="brand-head">
+      <a class="tt-logo-link" href="https://tinytapeout.com/" target="_blank" rel="noopener" title="Tiny Tapeout"><span class="tt-logo" role="img" aria-label="Tiny Tapeout logo"></span></a>
+      <h1>Chip cross-section viewer</h1>
+    </div>
     <p class="lede">Pick the chip on your bench. You'll confirm it matches before opening the viewer.</p>
     <div id="chip-cards" class="cards"></div>
     <footer id="version" class="version muted small"></footer>
@@ -42,8 +45,10 @@
 <section id="viewer" class="screen" hidden>
   <header class="topbar">
     <div class="title">
+      <a class="tt-logo-link" href="https://tinytapeout.com/" target="_blank" rel="noopener" title="Tiny Tapeout"><span class="tt-logo small" role="img" aria-label="Tiny Tapeout logo"></span></a>
       <strong id="chip-title"></strong>
       <span id="chip-sub" class="muted"></span>
+      <a id="chip-page" class="small" target="_blank" rel="noopener" hidden>Tiny Tapeout page ↗</a>
     </div>
     <button data-action="back-to-picker">Change chip</button>
   </header>
