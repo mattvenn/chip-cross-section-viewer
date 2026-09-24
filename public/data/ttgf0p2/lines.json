@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "id": "lmufh8t4x",
+    "name": "nmos",
+    "axis": "h",
+    "pos": 1227.634,
+    "created": "2026-09-24"
+  },
+  {
+    "id": "lmufh9m7w",
+    "name": "pmos",
+    "axis": "h",
+    "pos": 1224.065,
+    "created": "2026-09-24"
+  }
+]
