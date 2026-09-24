@@ -6,14 +6,15 @@
 // `split`) gets a fixed share of the height so thin layers stay visible.
 
 class CrossSection {
-  constructor(canvas, tip, chip, { onHover } = {}) {
+  constructor(canvas, tip, chip, { onHover, onDblClick } = {}) {
     this.canvas = canvas;
     this.tip = tip;
     this.chip = chip;
     this.onHover = onHover || (() => {});
+    this.onDblClick = onDblClick || (() => {});
     this.data = null;     // { length, offset, layers: [{..., intervals}] }
     this.view = null;     // [s0, s1] visible axis range
-    this.pad = { l: 78, r: 16, t: 14, b: 34 };
+    this.pad = { l: 78, r: 96, t: 14, b: 34 };  // right margin holds the depth dimension
     this._setupZ();
     this._bindEvents();
     new ResizeObserver(() => this.draw()).observe(canvas.parentElement);
@@ -87,7 +88,12 @@ class CrossSection {
     });
     c.addEventListener("pointerup", () => { drag = null; });
     c.addEventListener("pointerleave", () => { this.tip.hidden = true; this.onHover(null); this.draw(); });
-    c.addEventListener("dblclick", () => this.resetView());
+    // Double-click: hand the clicked position along the line (0..1) to the app.
+    c.addEventListener("dblclick", e => {
+      if (!this.data || e.offsetX < this.pad.l || e.offsetX > this.w - this.pad.r) return;
+      const t = (this.xToS(e.offsetX) + this.data.offset) / this.data.length;
+      if (t >= 0 && t <= 1) this.onDblClick(t, this.view[1] - this.view[0]);
+    });
   }
 
   _hover(x, y) {
@@ -219,6 +225,37 @@ class CrossSection {
     ctx.textAlign = "right";
     ctx.fillStyle = muted;
     ctx.fillText("µm", x1, yAxis + 20);
+
+    this._drawDepth(ctx, x1, fg, muted);
+  }
+
+  // Dimension from the top surface down to the transistors (silicon surface, z = 0).
+  _drawDepth(ctx, x1, fg, muted) {
+    const d = this.chip.depth;
+    if (!d) return;
+    const x = x1 + 16, yTop = this.zToY(d.top), yBot = this.zToY(0);
+    ctx.save();
+    ctx.strokeStyle = fg; ctx.fillStyle = fg; ctx.lineWidth = 1;
+    // extension lines from the plot edge
+    ctx.globalAlpha = 0.5; ctx.setLineDash([2, 2]);
+    for (const y of [yTop, yBot]) { ctx.beginPath(); ctx.moveTo(x1, y + 0.5); ctx.lineTo(x + 6, y + 0.5); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // dimension line with arrowheads
+    ctx.beginPath(); ctx.moveTo(x + 0.5, yTop); ctx.lineTo(x + 0.5, yBot); ctx.stroke();
+    for (const [y, dir] of [[yTop, 1], [yBot, -1]]) {
+      ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x - 3.5, y + 7 * dir); ctx.lineTo(x + 4.5, y + 7 * dir); ctx.closePath(); ctx.fill();
+    }
+    // label, centred on the dimension line
+    const yMid = (yTop + yBot) / 2;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.font = "600 12px system-ui, sans-serif";
+    ctx.fillText(`${d.estimate ? "≈ " : ""}${d.top.toFixed(2)} µm`, x + 8, yMid - 14);
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.fillStyle = muted;
+    ctx.fillText("surface to", x + 8, yMid + 2);
+    ctx.fillText("transistors", x + 8, yMid + 15);
+    if (d.estimate) ctx.fillText("(estimate)", x + 8, yMid + 28);
+    ctx.restore();
   }
 }
 

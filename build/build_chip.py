@@ -313,6 +313,7 @@ def main():
         ],
         "bands": pdk.get("bands", []),
         "ticks": pdk.get("ticks", []),
+        "depth": pdk.get("depth"),
     }
     index_path = OUT / "chips.json"
     index = json.loads(index_path.read_text()) if index_path.exists() else []

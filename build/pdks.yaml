@@ -28,6 +28,9 @@ sg13g2:
   ticks:
     - { label: "M1", z: 0.64 }
     - { label: "M5", z: 5.18 }
+  # Depth from the top surface (passivation over the top metal) down to the
+  # transistors (silicon surface, z = 0), shown as a dimension on the cross-section.
+  depth: { top: 15.73, estimate: false }   # TM2 top 13.83 + TPASS1 1.5 + TPASS2 0.4
 
 gf180mcu:
   name: GlobalFoundries GF180MCU (180 nm)
@@ -47,12 +50,15 @@ gf180mcu:
   ticks:
     - { label: "M1", z: 0.86 }
     - { label: "M3", z: 3.16 }
+  depth: { top: 8.5, estimate: true }      # passivation thickness not found in the PDK: estimate
 
 sky130:
   name: SkyWater SKY130 (130 nm)
   # Source: SKY130 metal stack diagram (heights above substrate; poly drawn from the
   # active surface). https://skywater-pdk.readthedocs.io/en/main/rules/assumptions.html
-  # STI depth and passivation are nominal.
+  # Passivation: 0.6 µm over met5 (passv_thickness in efabless sky130_klayout_pdk
+  # tech/sky130/xsect/sky130.xs). That script also has an optional 6.1 µm polyimide
+  # layer on top, not included here. STI depth is nominal.
   die_layer: null             # die box given in chips.yaml (the seal ring/scribe extends past it)
   layers:
     top_metal:       { gds: ["72/20"], label: "met5", z: [5.3711, 6.6311] }
@@ -63,8 +69,9 @@ sky130:
     - { label: "Substrate",   z: [-1.0, -0.3262], color: "#6b6f76" }
     - { label: "STI",         z: [-0.3262, 0.0],  color: "#9aa3ad" }
     - { label: "Dielectric",  z: [0.0, 6.6311],   color: "#c9dbe8" }
-    - { label: "Passivation", z: [6.6311, 7.9],   color: "#e4dcc6" }
+    - { label: "Passivation", z: [6.6311, 7.2311], color: "#e4dcc6" }
   ticks:
     - { label: "li1", z: 0.9361 }
     - { label: "M1", z: 1.3761 }
     - { label: "M3", z: 2.7861 }
+  depth: { top: 7.2311, estimate: false }  # met5 top 6.6311 + passivation 0.6 (no polyimide)
