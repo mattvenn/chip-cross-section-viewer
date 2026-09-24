@@ -12,9 +12,10 @@ const state = {
   store: null,
   layerOn: {},       // key -> bool
   opacity: 0.8,
-  line: null,        // { x0, y0, x1, y1 }
+  cut: null,         // { axis: "h" | "v", pos } absolute µm
+  line: null,        // the cut as a segment { x0, y0, x1, y1 }, edge to edge
   zero: { x: 0, y: 0 },
-  mode: null,        // "draw-a" | "draw-b" | "zero" | null
+  mode: null,        // "place-h" | "place-v" | "zero" | null
   fileLines: [],     // from data/<chip>/lines.json
   localLines: [],    // saved in this browser, not yet in the file
 };
@@ -87,8 +88,7 @@ async function openViewer(chip, fromHash = {}) {
   state.xsLayers = null;
   updateZeroInfo();
   await loadSavedLines();
-  if (fromHash.line) setLine(fromHash.line, { fit: true });
-  else { setLine(null); }
+  setCut(fromHash.cut || null, { show: !!fromHash.cut });
   updateHash();
 }
 
@@ -143,22 +143,12 @@ function buildMap(chip, tileIndex) {
   new ScaleBar({ position: "bottomleft" }).addTo(map);
   state.cursor = new CursorReadout({ position: "bottomright" }).addTo(map);
 
-  // line + endpoints + zero marker
+  // cross-section line + zero marker
   state.lineLayer = L.polyline([], { color: "#39c5ff", weight: 3, opacity: 0.95, interactive: false }).addTo(map);
   // Invisible, wider copy of the line that can be grabbed to move the whole line.
   state.lineGrab = L.polyline([], { weight: 16, opacity: 0, className: "line-grab" }).addTo(map);
   state.lineGrab.on("mousedown", onLineGrab);
-  state.previewLayer = L.polyline([], { color: "#39c5ff", weight: 2, dashArray: "6 4" }).addTo(map);
-  state.ends = ["A", "B"].map((lbl, i) => {
-    const m = L.marker([0, 0], {
-      draggable: true,
-      icon: L.divIcon({ className: "end-icon", html: `<span>${lbl}</span>`, iconSize: [20, 20] }),
-      zIndexOffset: 1000,
-    });
-    m.on("drag", e => onEndDrag(i, e));
-    m.on("dragend", () => { updateXs(); updateHash(); });
-    return m;
-  });
+  state.previewLayer = L.polyline([], { color: "#39c5ff", weight: 2, dashArray: "6 4", interactive: false }).addTo(map);
   state.zeroMarker = L.marker(toLatLng(state.zero.x, state.zero.y), {
     icon: L.divIcon({ className: "zero-icon", iconSize: [22, 22] }),
     interactive: false,
@@ -275,30 +265,42 @@ const CursorReadout = L.Control.extend({
 function setMode(mode) {
   state.mode = mode;
   $("#map").classList.toggle("crosshair", !!mode);
-  $("#draw-btn").classList.toggle("active", mode === "draw-a" || mode === "draw-b");
-  $("#draw-btn").textContent = mode === "draw-a" ? "Click start…" : mode === "draw-b" ? "Click end…" : "Draw line";
+  for (const [id, m, label] of [["#place-h", "place-h", "Horizontal line"], ["#place-v", "place-v", "Vertical line"]]) {
+    $(id).classList.toggle("active", mode === m);
+    $(id).textContent = mode === m ? "Click the chip…" : label;
+  }
   $("#zero-btn").classList.toggle("active", mode === "zero");
   $("#zero-btn").textContent = mode === "zero" ? "Click on map…" : "Set zero on map";
-  if (mode !== "draw-b") state.previewLayer.setLatLngs([]);
+  if (mode !== "place-h" && mode !== "place-v") state.previewLayer.setLatLngs([]);
 }
 
-// Cross-section lines are always horizontal or vertical.
-function isHorizontal(l) { return Math.abs(l.x1 - l.x0) >= Math.abs(l.y1 - l.y0); }
+// A cross-section line runs edge to edge across the die, so it is just an
+// axis ("h" or "v") and one absolute position in µm (Y for "h", X for "v").
+function cutSegment(cut) {
+  const { width_um: W, height_um: H } = state.chip;
+  return cut.axis === "h" ? { x0: 0, y0: cut.pos, x1: W, y1: cut.pos } : { x0: cut.pos, y0: 0, x1: cut.pos, y1: H };
+}
 
-// Point b moved onto the horizontal or vertical through a, whichever is closer.
-function snapAxis(a, b) {
-  return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
+function clampPos(axis, pos) {
+  return Math.min(Math.max(pos, 0), axis === "h" ? state.chip.height_um : state.chip.width_um);
+}
+
+// Saved lines and old links may use the earlier {x0, y0, x1, y1} form.
+function toCut(l) {
+  if (!l) return null;
+  if (l.axis === "h" || l.axis === "v") return { axis: l.axis, pos: Number(l.pos) };
+  if ([l.x0, l.y0, l.x1, l.y1].every(Number.isFinite)) {
+    return Math.abs(l.x1 - l.x0) >= Math.abs(l.y1 - l.y0) ? { axis: "h", pos: l.y0 } : { axis: "v", pos: l.x0 };
+  }
+  return null;
 }
 
 function onMapClick(e) {
   const p = fromLatLng(e.latlng);
-  if (state.mode === "draw-a") {
-    state.drawStart = p;
-    setMode("draw-b");
-  } else if (state.mode === "draw-b") {
-    const b = snapAxis(state.drawStart, p);
+  if (state.mode === "place-h" || state.mode === "place-v") {
+    const axis = state.mode === "place-h" ? "h" : "v";
     setMode(null);
-    setLine({ x0: state.drawStart.x, y0: state.drawStart.y, x1: b.x, y1: b.y });
+    setCut({ axis, pos: axis === "h" ? p.y : p.x }, { newLine: true });
     $("#saved-lines").value = "";
   } else if (state.mode === "zero") {
     setMode(null);
@@ -310,45 +312,34 @@ function onMapMove(e) {
   const p = fromLatLng(e.latlng);
   state.cursor.update(p);
   moveCrosshair(e.containerPoint);
-  if (state.mode === "draw-b") {
-    const b = snapAxis(state.drawStart, p);
-    state.previewLayer.setLatLngs([toLatLng(state.drawStart.x, state.drawStart.y), toLatLng(b.x, b.y)]);
+  if (state.mode === "place-h" || state.mode === "place-v") {
+    const axis = state.mode === "place-h" ? "h" : "v";
+    const l = cutSegment({ axis, pos: clampPos(axis, axis === "h" ? p.y : p.x) });
+    state.previewLayer.setLatLngs([toLatLng(l.x0, l.y0), toLatLng(l.x1, l.y1)]);
   }
 }
 
-// Dragging an end point only changes the length: it stays on the line's axis.
-function onEndDrag(i, e) {
-  const p = fromLatLng(e.target.getLatLng());
-  const l = { ...state.line };
-  const other = i === 0 ? { x: l.x1, y: l.y1 } : { x: l.x0, y: l.y0 };
-  const q = isHorizontal(l) ? { x: p.x, y: other.y } : { x: other.x, y: p.y };
-  if (i === 0) { l.x0 = q.x; l.y0 = q.y; } else { l.x1 = q.x; l.y1 = q.y; }
-  e.target.setLatLng(toLatLng(q.x, q.y));
-  setLine(l, { quiet: true });
-  $("#saved-lines").value = "";
-}
-
-// Dragging the line itself moves it, keeping its length and direction.
+// Dragging the line moves it across the chip (up/down for horizontal lines).
 function onLineGrab(e) {
-  if (state.mode || !state.line) return;
+  if (state.mode || !state.cut) return;
   L.DomEvent.stop(e);
   const map = state.map;
   map.dragging.disable();
-  const start = fromLatLng(e.latlng), orig = { ...state.line };
-  $("#map").classList.add("moving-line");
+  const start = fromLatLng(e.latlng), orig = { ...state.cut };
+  $("#map").classList.add(orig.axis === "h" ? "moving-line-h" : "moving-line-v");
   const move = ev => {
     const p = fromLatLng(ev.latlng);
-    const dx = p.x - start.x, dy = p.y - start.y;
-    setLine({ x0: orig.x0 + dx, y0: orig.y0 + dy, x1: orig.x1 + dx, y1: orig.y1 + dy }, { quiet: true });
+    const d = orig.axis === "h" ? p.y - start.y : p.x - start.x;
+    setCut({ axis: orig.axis, pos: orig.pos + d }, { quiet: true });
   };
   const up = () => {
     map.off("mousemove", move);
     document.removeEventListener("mouseup", up);
     map.dragging.enable();
-    $("#map").classList.remove("moving-line");
-    if (state.line.x0 !== orig.x0 || state.line.y0 !== orig.y0) {
+    $("#map").classList.remove("moving-line-h", "moving-line-v");
+    if (state.cut.pos !== orig.pos) {
       $("#saved-lines").value = "";
-      setLine(state.line);
+      setCut(state.cut);
     }
   };
   map.on("mousemove", move);
@@ -358,52 +349,50 @@ function onLineGrab(e) {
 function round3(v) { return Math.round(v * 1000) / 1000; }
 
 // quiet: update the drawing and inputs only (used while dragging)
-function setLine(line, { fit = false, quiet = false } = {}) {
-  state.line = line && { x0: round3(line.x0), y0: round3(line.y0), x1: round3(line.x1), y1: round3(line.y1) };
+// newLine: open the cross-section on the part of the chip visible on the map
+// show: pan the map so the line is in view
+function setCut(cut, { quiet = false, newLine = false, show = false } = {}) {
+  cut = toCut(cut);
+  state.cut = cut && { axis: cut.axis, pos: round3(clampPos(cut.axis, cut.pos)) };
+  state.line = state.cut && cutSegment(state.cut);
+  $("#map").dataset.cut = state.cut ? state.cut.axis : "";
   const l = state.line;
   if (!l) {
     state.lineLayer.setLatLngs([]);
     state.lineGrab.setLatLngs([]);
-    state.ends.forEach(m => m.remove());
   } else {
     const a = toLatLng(l.x0, l.y0), b = toLatLng(l.x1, l.y1);
     state.lineLayer.setLatLngs([a, b]);
     state.lineGrab.setLatLngs([a, b]);
-    state.ends[0].setLatLng(a).addTo(state.map);
-    state.ends[1].setLatLng(b).addTo(state.map);
-    if (fit) state.map.fitBounds(L.latLngBounds(a, b).pad(0.3), { maxZoom: state.chip.max_zoom + 1 });
+    if (show) {
+      const c = fromLatLng(state.map.getCenter());
+      state.map.panTo(state.cut.axis === "h" ? toLatLng(c.x, state.cut.pos) : toLatLng(state.cut.pos, c.y));
+    }
   }
   updateLineInputs();
-  if (!quiet) { updateXs(); updateHash(); }
+  if (!quiet) { updateXs({ fitMap: newLine || show }); updateHash(); }
 }
 
-function updateLineInputs() {
-  const l = state.line, z = state.zero;
-  for (const [id, v] of [["x0", l && l.x0 - z.x], ["y0", l && l.y0 - z.y], ["x1", l && l.x1 - z.x], ["y1", l && l.y1 - z.y]]) {
-    const el = $(`#${id}`);
-    if (document.activeElement !== el) el.value = l ? v.toFixed(3) : "";
-  }
-  if (!l) { $("#line-info").textContent = "No line yet."; return; }
-  const dx = l.x1 - l.x0, dy = l.y1 - l.y0;
-  const len = Math.hypot(dx, dy);
-  const dir = dx === 0 && dy === 0 ? "" : isHorizontal(l) ? " · horizontal" : " · vertical";
-  $("#line-info").innerHTML = `Length ${len.toFixed(3)} µm${dir}<br>` +
-    `Absolute: (${l.x0.toFixed(3)}, ${l.y0.toFixed(3)}) → (${l.x1.toFixed(3)}, ${l.y1.toFixed(3)}) µm`;
+// force: also overwrite the box while it has focus (e.g. after the zero changed)
+function updateLineInputs({ force = false } = {}) {
+  const c = state.cut, z = state.zero;
+  const axisName = c && c.axis === "v" ? "X" : "Y";
+  $("#pos-label").textContent = `${axisName} (µm)`;
+  const el = $("#pos");
+  el.disabled = !c;
+  const rel = c ? (c.pos - (c.axis === "h" ? z.y : z.x)).toFixed(3) : "";
+  if (force || document.activeElement !== el) el.value = rel;
+  if (!c) { $("#line-info").textContent = "No line yet."; return; }
+  const span = c.axis === "h" ? `full width, ${state.chip.width_um} µm` : `full height, ${state.chip.height_um} µm`;
+  $("#line-info").innerHTML = `${c.axis === "h" ? "Horizontal" : "Vertical"} line at ${axisName} = ${rel} µm` +
+    `<br>Absolute ${axisName} = ${c.pos.toFixed(3)} µm · ${span}`;
 }
 
-// Typed coordinates. On a horizontal line both Y boxes are one value (and X on a
-// vertical line), so editing either moves the line; the result is kept on an axis.
-function onLineInput(e) {
-  const v = id => parseFloat($(`#${id}`).value);
-  const [x0, y0, x1, y1] = ["x0", "y0", "x1", "y1"].map(v);
-  if ([x0, y0, x1, y1].some(Number.isNaN)) return;
-  const z = state.zero, id = e.target.id;
-  const l = { x0: x0 + z.x, y0: y0 + z.y, x1: x1 + z.x, y1: y1 + z.y };
-  const prev = state.line;
-  if (prev && isHorizontal(prev) && (id === "y0" || id === "y1")) l.y0 = l.y1 = v(id) + z.y;
-  else if (prev && !isHorizontal(prev) && (id === "x0" || id === "x1")) l.x0 = l.x1 = v(id) + z.x;
-  const b = snapAxis({ x: l.x0, y: l.y0 }, { x: l.x1, y: l.y1 });
-  setLine({ x0: l.x0, y0: l.y0, x1: b.x, y1: b.y });
+function onLineInput() {
+  const v = parseFloat($("#pos").value);
+  if (!state.cut || Number.isNaN(v)) return;
+  const z = state.zero;
+  setCut({ axis: state.cut.axis, pos: v + (state.cut.axis === "h" ? z.y : z.x) }, { show: true });
   $("#saved-lines").value = "";
 }
 
@@ -412,7 +401,7 @@ function setZero(p) {
   storage.set(`zero:${state.chip.id}`, state.zero);
   state.zeroMarker.setLatLng(toLatLng(state.zero.x, state.zero.y));
   updateZeroInfo();
-  updateLineInputs();
+  updateLineInputs({ force: true });
   redrawXs();
   updateHash();
 }
@@ -426,7 +415,7 @@ function updateZeroInfo() {
 
 let xsToken = 0;
 
-async function updateXs() {
+async function updateXs({ fitMap = false } = {}) {
   const l = state.line;
   if (!l) { state.xs.setData(null); $("#xs-status").textContent = ""; return; }
   const token = ++xsToken;
@@ -438,6 +427,21 @@ async function updateXs() {
   state.xsLayers = layers;
   $("#xs-status").textContent = "";
   redrawXs(false);
+  if (fitMap) fitXsToMap();
+}
+
+// Show the stretch of the line that is visible on the map (double-click shows all of it).
+function fitXsToMap() {
+  const c = state.cut, xs = state.xs;
+  if (!c || !xs.data) return;
+  const b = state.map.getBounds();
+  const p0 = fromLatLng(b.getSouthWest()), p1 = fromLatLng(b.getNorthEast());
+  const [lo, hi] = c.axis === "h" ? [p0.x, p1.x] : [p0.y, p1.y];
+  const len = xs.data.length;
+  const a = Math.max(0, Math.min(lo, hi)), z = Math.min(len, Math.max(lo, hi));
+  if (z - a <= 0 || z - a >= len) return;
+  xs.view = [a - xs.data.offset, z - xs.data.offset];
+  xs.draw();
 }
 
 // Recompute the axis offset (depends on zero) and enabled layers without refetching.
@@ -489,15 +493,15 @@ function renderSavedLines() {
 
 function selectSavedLine(id) {
   const l = allLines().find(x => x.id === id);
-  if (l) setLine(l, { fit: true });
+  if (l) setCut(l, { show: true });
 }
 
 function saveLine() {
-  if (!state.line) { alert("Draw a line first."); return; }
+  if (!state.cut) { alert("Place a line first."); return; }
   const name = prompt("Name for this cross-section:", `Section ${allLines().length + 1}`);
   if (!name) return;
   const note = prompt("Optional note (e.g. what the section should show):", "") || undefined;
-  const entry = { id: `l${Date.now().toString(36)}`, name, ...state.line, note, created: new Date().toISOString().slice(0, 10) };
+  const entry = { id: `l${Date.now().toString(36)}`, name, ...state.cut, note, created: new Date().toISOString().slice(0, 10) };
   state.localLines.push(entry);
   storage.set(`lines:${state.chip.id}`, state.localLines);
   renderSavedLines();
@@ -537,8 +541,10 @@ function parseHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   const out = { chip: p.get("chip") };
   const nums = s => s && s.split(",").map(Number);
+  const c = (p.get("cut") || "").split(",");
+  if ((c[0] === "h" || c[0] === "v") && Number.isFinite(parseFloat(c[1]))) out.cut = { axis: c[0], pos: parseFloat(c[1]) };
   const line = nums(p.get("line"));
-  if (line && line.length === 4 && line.every(Number.isFinite)) out.line = { x0: line[0], y0: line[1], x1: line[2], y1: line[3] };
+  if (!out.cut && line && line.length === 4 && line.every(Number.isFinite)) out.cut = toCut({ x0: line[0], y0: line[1], x1: line[2], y1: line[3] });
   const zero = nums(p.get("zero"));
   if (zero && zero.length === 2 && zero.every(Number.isFinite)) out.zero = { x: zero[0], y: zero[1] };
   return out;
@@ -547,8 +553,7 @@ function parseHash() {
 function updateHash() {
   if (!state.chip) return;
   const p = new URLSearchParams({ chip: state.chip.id });
-  const l = state.line;
-  if (l) p.set("line", [l.x0, l.y0, l.x1, l.y1].join(","));
+  if (state.cut) p.set("cut", `${state.cut.axis},${state.cut.pos}`);
   if (state.zero.x || state.zero.y) p.set("zero", `${state.zero.x},${state.zero.y}`);
   history.replaceState(null, "", `#${p.toString().replace(/%2C/g, ",")}`);
 }
@@ -558,10 +563,10 @@ function updateHash() {
 const actions = {
   "back-to-picker": () => { state.chip = null; history.replaceState(null, "", location.pathname); renderPicker(); },
   "confirm-chip": () => openViewer(state.pending),
-  "draw-line": () => setMode(state.mode === "draw-a" || state.mode === "draw-b" ? null : "draw-a"),
-  "clear-line": () => { setMode(null); setLine(null); $("#saved-lines").value = ""; },
+  "place-h": () => setMode(state.mode === "place-h" ? null : "place-h"),
+  "place-v": () => setMode(state.mode === "place-v" ? null : "place-v"),
+  "clear-line": () => { setMode(null); setCut(null); $("#saved-lines").value = ""; },
   "set-zero": () => setMode(state.mode === "zero" ? null : "zero"),
-  "zero-line-start": () => { if (state.line) setZero({ x: state.line.x0, y: state.line.y0 }); },
   "reset-zero": () => setZero({ x: 0, y: 0 }),
   "save-line": saveLine,
   "download-lines": downloadLines,
@@ -572,7 +577,7 @@ document.addEventListener("click", e => {
   const el = e.target.closest("[data-action]");
   if (el && actions[el.dataset.action]) actions[el.dataset.action]();
 });
-for (const id of ["x0", "y0", "x1", "y1"]) $(`#${id}`).addEventListener("change", onLineInput);
+$("#pos").addEventListener("change", onLineInput);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && state.map) setMode(null); });
 $("#saved-lines").addEventListener("change", e => selectSavedLine(e.target.value));
 $("#opacity").addEventListener("input", e => {

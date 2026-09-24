@@ -79,14 +79,13 @@
       <details class="panel" open>
         <summary>Cross-section line</summary>
         <div class="row">
-          <button id="draw-btn" data-action="draw-line" class="primary">Draw line</button>
+          <button id="place-h" data-action="place-h" class="primary">Horizontal line</button>
+          <button id="place-v" data-action="place-v" class="primary">Vertical line</button>
           <button data-action="clear-line">Clear</button>
         </div>
-        <p class="note">Click the start, then the end: lines are always horizontal or vertical. Drag an end point to change the length, or drag the line to move it.</p>
-        <div class="coords">
-          <span></span><span>X (µm)</span><span>Y (µm)</span>
-          <span>Start</span><input id="x0" type="number" step="0.001"><input id="y0" type="number" step="0.001">
-          <span>End</span><input id="x1" type="number" step="0.001"><input id="y1" type="number" step="0.001">
+        <p class="note">Pick a direction, then click the chip to place the line. It always runs edge to edge across the die. Drag the line to move it.</p>
+        <div class="coords one">
+          <label id="pos-label" for="pos">Y (µm)</label><input id="pos" type="number" step="0.001" disabled>
         </div>
         <p id="line-info" class="muted small"></p>
       </details>
@@ -96,7 +95,6 @@
         <p class="small">Current zero (absolute): <span id="zero-info"></span></p>
         <div class="row">
           <button id="zero-btn" data-action="set-zero">Set zero on map</button>
-          <button data-action="zero-line-start">Zero = line start</button>
           <button data-action="reset-zero">Reset</button>
         </div>
         <p class="note">Coordinates are shown relative to the zero. Saved lines always store absolute die coordinates (from the die's lower-left corner).</p>
