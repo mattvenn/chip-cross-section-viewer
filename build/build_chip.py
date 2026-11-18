@@ -7,6 +7,8 @@ Writes into public/data/<chip>/:
   tiles/<layer>/{z}/{x}/{y}.png   transparent tiles in the layer colour
   tiles/<layer>/index.json        list of non-empty tiles ("z/x/y")
   vec/<layer>/<cx>_<cy>.json      polygons per cell, nm relative to the cell corner
+  vec/<layer>/<cx>_<cy>.bin       the same for "vec: boxes" layers (contacts, vias), as
+                                  gzipped rectangle lists (see build_boxes)
   vec/<layer>/index.json          list of non-empty cells [cx, cy]
   thumb.png                       whole-die overview
 and updates public/data/chips.json.
@@ -15,12 +17,15 @@ Coordinates everywhere are relative to the lower-left corner of the die.
 Tile rows count from the top of the die (Leaflet convention).
 """
 import argparse
+import gzip
 import io
 import json
 import math
 import os
 import sys
+import struct
 import time
+from array import array
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -166,6 +171,90 @@ def encode_polygon(poly, bx, by, to_nm):
     return out
 
 
+def encode_boxes(boxes):
+    """Rectangles (x, y, w, h) in nm, relative to the cell corner -> gzipped bytes.
+
+    Little-endian:  uint32 group count, then per group of same-size boxes:
+      uint16 w, uint16 h, uint32 n, then n x (uint16 dx, uint16 dy)
+    where (dx, dy) is the box's lower-left corner minus the previous one in
+    the group, modulo 2^16 (positions start at 0, 0). Boxes are sorted by y
+    then x, so regular via arrays become runs of identical steps, which gzip
+    squeezes to almost nothing.
+    """
+    groups = {}
+    for x, y, w, h in boxes:
+        groups.setdefault((w, h), []).append((y, x))
+    out = [struct.pack("<I", len(groups))]
+    for (w, h), pts in groups.items():
+        pts.sort()
+        out.append(struct.pack("<HHI", w, h, len(pts)))
+        a = array("H")
+        px = py = 0
+        for y, x in pts:
+            a.append((x - px) & 0xFFFF)
+            a.append((y - py) & 0xFFFF)
+            px, py = x, y
+        if sys.byteorder != "little":
+            a.byteswap()
+        out.append(a.tobytes())
+    return gzip.compress(b"".join(out), 9, mtime=0)
+
+
+def build_boxes(layout, top, die, key, info, render, out_dir):
+    """Write a contact/via layer as rectangle lists, one 50 µm cell at a time.
+
+    Contacts and vias run to tens of millions of shapes, so the layout is read
+    cell by cell through the hierarchy instead of flattened in one go. Shapes
+    are clipped to the cell; a non-rectangular one is split into rectangles.
+    """
+    t = time.time()
+    cell_um = render["vec_cell_um"]
+    dbu = layout.dbu
+    to_nm = dbu * 1000
+    cell = round(cell_um / dbu)
+    ox, oy = round(die.left / dbu), round(die.bottom / dbu)
+    ncx = math.ceil(die.width() / cell_um)
+    ncy = math.ceil(die.height() / cell_um)
+    lis = [li for li in (layout.find_layer(*parse_ld(src)) for src in info["gds"]) if li is not None]
+    vdir = out_dir / "vec" / key
+    vdir.mkdir(parents=True, exist_ok=True)
+    cells, size, count = [], 0, 0
+    for cx in range(ncx):
+        for cy in range(ncy):
+            cbox = db.Box(ox + cx * cell, oy + cy * cell, ox + (cx + 1) * cell, oy + (cy + 1) * cell)
+            boxes = set()  # a set also drops shapes drawn twice
+            for li in lis:
+                it = top.begin_shapes_rec_touching(li, cbox)
+                while not it.at_end():
+                    shape, tr = it.shape(), it.trans()
+                    if shape.is_box():
+                        parts = [shape.box.transformed(tr)]
+                    else:
+                        poly = shape.polygon
+                        if poly is None:
+                            it.next()
+                            continue
+                        poly = poly.transformed(tr)
+                        parts = [p.bbox() for p in poly.decompose_trapezoids()] if not poly.is_box() else [poly.bbox()]
+                    for b in parts:
+                        b = b & cbox
+                        if b.empty() or b.width() == 0 or b.height() == 0:
+                            continue
+                        boxes.add((round((b.left - cbox.left) * to_nm), round((b.bottom - cbox.bottom) * to_nm),
+                                   round(b.width() * to_nm), round(b.height() * to_nm)))
+                    it.next()
+            if not boxes:
+                continue
+            data = encode_boxes(boxes)
+            (vdir / f"{cx}_{cy}.bin").write_bytes(data)
+            cells.append([cx, cy])
+            size += len(data)
+            count += len(boxes)
+    (vdir / "index.json").write_text(json.dumps(sorted(cells), separators=(",", ":")))
+    print(f"  vec {key} (boxes): {count} rectangles, {len(cells)} cells, "
+          f"{size / 1e6:.1f} MB, {time.time() - t:.0f}s")
+
+
 def build_vectors(layout, top, die, layers, render, out_dir):
     cell_um = render["vec_cell_um"]
     dbu = layout.dbu
@@ -175,6 +264,9 @@ def build_vectors(layout, top, die, layers, render, out_dir):
     ncx = math.ceil(die.width() / cell_um)
     ncy = math.ceil(die.height() / cell_um)
     for key, info in layers.items():
+        if info.get("vec") == "boxes":
+            build_boxes(layout, top, die, key, info, render, out_dir)
+            continue
         t = time.time()
         region = db.Region()
         for src in info["gds"]:
@@ -310,7 +402,8 @@ def main():
         "thumb": f"data/{args.chip}/thumb.png",
         "layers": [
             {"key": k, "name": v["name"], "label": v["label"], "color": v["color"],
-             "gds": v["gds"], "z": v["z"], "default_on": v.get("default_on", True)}
+             "gds": v["gds"], "z": v["z"], "default_on": v.get("default_on", True),
+             "vec": v.get("vec", "json")}
             for k, v in layers.items()
         ],
         "bands": pdk.get("bands", []),

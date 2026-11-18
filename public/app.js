@@ -85,6 +85,7 @@ async function openViewer(chip, fromHash = {}) {
 
   const tileIndex = Object.fromEntries(await Promise.all(chip.layers.map(async l => [l.key,
     new Set(await fetchJson(`data/${chip.id}/tiles/${l.key}/index.json`))])));
+  setXsHeight(storage.get("xsHeight", XS_DEFAULT), false);
   buildMap(chip, tileIndex);
   buildLayerList(chip);
   if (!state.xs) state.xs = new CrossSection($("#xs-canvas"), $("#xs-tip"), chip, { onHover: showHoverOnMap, onDblClick: showXsSpotOnMap });
@@ -743,6 +744,59 @@ $("#opacity").addEventListener("input", e => {
   storage.set("opacity", state.opacity);
   applyLayerVisibility();
 });
+
+// ---------------------------------------------------------------- map / cross-section divider
+
+// Drag the divider (or focus it and use the arrow keys) to give the
+// cross-section more or less room; double-click resets it. The height is
+// remembered in this browser.
+const XS_DEFAULT = 280, XS_MIN = 140, MAP_MIN = 160;
+
+function setXsHeight(h, save = true) {
+  const wrap = $(".xs-wrap"), views = $(".views");
+  const max = Math.max(XS_MIN, views.clientHeight - MAP_MIN - $("#splitter").offsetHeight);
+  h = Math.round(Math.min(Math.max(h, XS_MIN), max));
+  wrap.style.height = `${h}px`;
+  $("#splitter").setAttribute("aria-valuenow", h);
+  if (state.map) state.map.invalidateSize({ pan: false });
+  if (save) storage.set("xsHeight", h);
+}
+
+(function setupSplitter() {
+  const sp = $("#splitter");
+  let drag = null;
+  sp.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    sp.setPointerCapture(e.pointerId);
+    drag = { y: e.clientY, h: $(".xs-wrap").offsetHeight, frame: 0 };
+    sp.classList.add("dragging");
+    document.body.classList.add("resizing-xs");
+  });
+  sp.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const h = drag.h + drag.y - e.clientY;
+    cancelAnimationFrame(drag.frame);
+    drag.frame = requestAnimationFrame(() => setXsHeight(h, false));
+  });
+  const end = () => {
+    if (!drag) return;
+    cancelAnimationFrame(drag.frame);
+    drag = null;
+    sp.classList.remove("dragging");
+    document.body.classList.remove("resizing-xs");
+    setXsHeight($(".xs-wrap").offsetHeight);
+  };
+  sp.addEventListener("pointerup", end);
+  sp.addEventListener("pointercancel", end);
+  sp.addEventListener("dblclick", () => setXsHeight(XS_DEFAULT));
+  sp.addEventListener("keydown", e => {
+    const step = e.shiftKey ? 100 : 20;
+    if (e.key === "ArrowUp") { e.preventDefault(); setXsHeight($(".xs-wrap").offsetHeight + step); }
+    if (e.key === "ArrowDown") { e.preventDefault(); setXsHeight($(".xs-wrap").offsetHeight - step); }
+  });
+  // keep the saved height valid when the window changes size
+  window.addEventListener("resize", () => { if (!$("#viewer").hidden) setXsHeight($(".xs-wrap").offsetHeight, false); });
+})();
 
 // version.json is written by the deploy workflow; a local copy doesn't have one.
 async function showVersion() {

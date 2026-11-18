@@ -30,7 +30,9 @@ class CrossSection {
     const zs = [...this.chip.bands.flatMap(b => b.z), ...this.chip.layers.flatMap(l => l.z)];
     this.zMin = Math.min(...zs);
     this.zMax = Math.max(...zs);
-    const feolTop = Math.max(...this.chip.layers.filter(l => l.z[1] < 1).map(l => l.z[1]), 0);
+    // The transistors (diffusion + poly) get the lower part of the axis; contacts
+    // rise from them to the first metal, so they don't count.
+    const feolTop = Math.max(...this.chip.layers.filter(l => l.key === "diff" || l.key === "poly").map(l => l.z[1]), 0);
     this.split = feolTop + 0.3;
     this.feolShare = 0.38;
   }

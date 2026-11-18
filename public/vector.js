@@ -16,9 +16,29 @@ async function fetchJson(url, { tries = 3, ...opts } = {}) {
   }
 }
 
+// Fetch a binary file, retrying like fetchJson, and gunzip it if needed. The
+// .bin files are stored gzipped; a server may already have undone that (if it
+// sent them with Content-Encoding: gzip), so check for the gzip magic number.
+async function fetchGzipped(url, { tries = 3 } = {}) {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+      const buf = await r.arrayBuffer();
+      const b = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+      if (b[0] !== 0x1f || b[1] !== 0x8b) return buf;
+      return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    } catch (err) {
+      if (i + 1 >= tries) throw err;
+      await new Promise(res => setTimeout(res, 400 * 2 ** i));
+    }
+  }
+}
+
 class VectorStore {
   constructor(chip) {
     this.chip = chip;
+    this.format = Object.fromEntries(chip.layers.map(l => [l.key, l.vec || "json"]));
     this.cellUm = chip.vec_cell_um;
     this.base = `data/${chip.id}/vec`;
     this.index = {};   // layer -> Set("cx_cy")
@@ -54,14 +74,35 @@ class VectorStore {
     });
   }
 
+  // Decode a "boxes" cell file (see encode_boxes in build/build_chip.py):
+  // groups of same-size rectangles whose corners are stored as steps from the
+  // previous one, modulo 2^16 nm.
+  static decodeBoxes(buf, cx, cy, cellUm) {
+    const bx = cx * cellUm, by = cy * cellUm, dv = new DataView(buf), out = [];
+    let o = 4;
+    for (let g = dv.getUint32(0, true); g > 0; g--) {
+      const w = dv.getUint16(o, true) / 1000, h = dv.getUint16(o + 2, true) / 1000, n = dv.getUint32(o + 4, true);
+      o += 8;
+      let x = 0, y = 0;
+      for (let i = 0; i < n; i++, o += 4) {
+        x = (x + dv.getUint16(o, true)) & 0xffff;
+        y = (y + dv.getUint16(o + 2, true)) & 0xffff;
+        const x0 = bx + x / 1000, y0 = by + y / 1000;
+        out.push(Float64Array.of(x0, y0, x0 + w, y0, x0 + w, y0 + h, x0, y0 + h));
+      }
+    }
+    return out;
+  }
+
   async cell(layer, cx, cy) {
     const idx = await this.loadIndex(layer);
     const k = `${cx}_${cy}`;
     if (!idx.has(k)) return [];
     const key = `${layer}/${k}`;
     if (!this.cache[key]) {
-      this.cache[key] = fetchJson(`${this.base}/${layer}/${k}.json`)
-        .then(raw => VectorStore.decode(raw, cx, cy, this.cellUm))
+      this.cache[key] = (this.format[layer] === "boxes"
+        ? fetchGzipped(`${this.base}/${layer}/${k}.bin`).then(buf => VectorStore.decodeBoxes(buf, cx, cy, this.cellUm))
+        : fetchJson(`${this.base}/${layer}/${k}.json`).then(raw => VectorStore.decode(raw, cx, cy, this.cellUm)))
         .catch(err => { delete this.cache[key]; throw err; });
     }
     return this.cache[key];
