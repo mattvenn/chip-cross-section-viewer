@@ -44,15 +44,15 @@ In case it's useful - chip renders: https://github.com/TinyTapeout/tinytapeout-c
 
 # Building and running
 
-Chips are configured in `build/chips.yaml` (logical layers + colours, shared by all chips) and `build/pdks.yaml` (GDS layer mapping and nominal stack heights per PDK).
+Chips are configured in `build/chips.yaml` (logical layers + colours, shared by all chips; the metals under the top two start hidden) and `build/pdks.yaml` (GDS layer mapping and nominal stack heights per PDK).
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -r build/requirements.txt
 .venv/bin/python build/fetch.py                  # download layouts to build/cache/
-for c in tt02 ttgf0p2 ttihp25b; do .venv/bin/python build/build_chip.py $c; done   # tiles, vector chunks, thumbnail -> public/data/ (~4 min per chip)
+for c in tt02 ttgf0p2 ttihp25b; do .venv/bin/python build/build_chip.py $c; done   # tiles, vector chunks, thumbnail -> public/data/ (~10-20 min per chip)
 .venv/bin/python build/serve.py 8000             # open http://localhost:8000 (no-cache test server)
 ```
 
 Saved cross-sections: draw a line, "Save current line…", then "Download lines.json" and commit it as `public/data/<chip>/lines.json`. Coordinates in that file are absolute µm from the die's lower-left corner.
 
-`.github/workflows/deploy.yml` publishes `public/` to GitHub Pages on push to `main`. The generated chip data is cached, so it is only rebuilt (~15 min) when `build/*.py` or `build/*.yaml` change; other pushes (viewer code, `lines.json`) deploy in a couple of minutes.
+`.github/workflows/deploy.yml` publishes `public/` to GitHub Pages on push to `main`. The generated chip data is cached, so it is only rebuilt (~45 min) when `build/*.py` or `build/*.yaml` change; other pushes (viewer code, `lines.json`) deploy in a couple of minutes.

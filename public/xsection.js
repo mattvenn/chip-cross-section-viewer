@@ -189,19 +189,35 @@ class CrossSection {
     ctx.moveTo(x0 - 8, ys + 7); ctx.lineTo(x0 - 2, ys + 1);
     ctx.stroke();
 
-    // z labels
-    ctx.fillStyle = fg; ctx.textAlign = "right"; ctx.textBaseline = "middle";
-    const labels = [
-      ...this.data.layers.map(l => ({ text: l.label, z: (l.z[0] + l.z[1]) / 2, color: l.color })),
+    // z labels. Shown layers always get one: when they are closer than a line
+    // of text (e.g. several thin metals) they are spread apart, with a short
+    // leader to the layer's real height. Hidden layers (as dashed reference
+    // lines), reference ticks and bands follow wherever they still fit.
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    const GAP = 12;
+    const shown = this.data.layers.filter(l => l.enabled)
+      .map(l => ({ text: l.label, y: this.zToY((l.z[0] + l.z[1]) / 2) }));
+    spreadLabels(shown, GAP, pad.t, this.h - pad.b);
+    const used = [];
+    ctx.strokeStyle = muted; ctx.lineWidth = 1;
+    for (const lb of shown) {
+      used.push(lb.at);
+      ctx.fillStyle = fg;
+      ctx.fillText(lb.text, x0 - 12, lb.at);
+      if (Math.abs(lb.at - lb.y) > 1) {
+        ctx.beginPath(); ctx.moveTo(x0 - 10, lb.at); ctx.lineTo(x0 - 1, lb.y); ctx.stroke();
+      }
+    }
+    const others = [
+      ...this.data.layers.filter(l => !l.enabled).map(l => ({ text: l.label, z: (l.z[0] + l.z[1]) / 2, tick: true })),
       ...this.chip.ticks.map(t => ({ text: t.label, z: t.z, tick: true })),
       ...this.chip.bands.filter(b => /substrate|passiv|polyimide/i.test(b.label)).map(b => ({ text: b.label, z: (b.z[0] + b.z[1]) / 2, dim: true })),
-    ].sort((a, b) => a.z - b.z);
-    let lastY = Infinity;
-    for (const lb of labels) {
+    ];
+    for (const lb of others) {
       const y = this.zToY(lb.z);
-      if (lastY - y < 12) continue;  // avoid overlaps
-      lastY = y;
-      ctx.fillStyle = lb.dim || lb.tick ? muted : fg;
+      if (used.some(u => Math.abs(u - y) < GAP)) continue;  // avoid overlaps
+      used.push(y);
+      ctx.fillStyle = muted;
       ctx.fillText(lb.text, x0 - 12, y);
       if (lb.tick) {
         ctx.strokeStyle = muted; ctx.globalAlpha = 0.5; ctx.setLineDash([2, 3]);
@@ -264,6 +280,26 @@ class CrossSection {
     ctx.fillText(`starts at ${est}${d.top.toFixed(2)}`, x + 8, ySi - 10);
     ctx.restore();
   }
+}
+
+// Give each label {y} a position `at`, at least `gap` apart and within
+// [top, bottom], staying as close to y as it can (labels keep their order).
+// Overlapping runs are merged into blocks centred on their labels' mean y.
+function spreadLabels(labels, gap, top, bottom) {
+  labels.sort((a, b) => a.y - b.y);
+  const blocks = [];
+  for (const lb of labels) {
+    blocks.push({ items: [lb], sum: lb.y });
+    for (;;) {
+      const b = blocks[blocks.length - 1], prev = blocks[blocks.length - 2];
+      b.start = Math.min(Math.max(b.sum / b.items.length - (b.items.length - 1) * gap / 2, top),
+        bottom - (b.items.length - 1) * gap);
+      if (!prev || prev.start + prev.items.length * gap <= b.start) break;
+      prev.items.push(...b.items); prev.sum += b.sum;
+      blocks.pop();
+    }
+  }
+  for (const b of blocks) b.items.forEach((lb, i) => { lb.at = b.start + i * gap; });
 }
 
 // Split text into lines no wider than maxW (in the context's current font).
