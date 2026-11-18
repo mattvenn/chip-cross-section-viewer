@@ -1,19 +1,32 @@
 # Logical layers shared by every chip: same key -> same colour everywhere.
 # Listed bottom to top (draw order). A PDK uses the ones it has.
-# The two top metals have their own keys, so the metal you see from above is
-# the same colour on every chip; the metals under them are numbered from the
-# bottom. default_on: false layers start hidden (the viewer is mostly used with
-# the top metal and the transistors; the thumbnail shows only the default ones).
+# The two top metals (and the via between them) have their own keys, so the
+# metal you see from above is the same colour on every chip; the metals under
+# them are numbered from the bottom. A via is named after the metal below it
+# (via1 joins Metal 1 to the metal above) and drawn in a dark shade of it, so it
+# stands out on the metal (map) and the light dielectric (cross-section).
+# vec: boxes stores the layer as a compact list of rectangles (see build_chip.py);
+# contacts and vias run to tens of millions of shapes per chip.
+# default_on: false layers start hidden (the viewer is mostly used with the top
+# metal and the transistors; the thumbnail shows only the default ones).
 logical_layers:
   diff:            { name: "Diffusion",          color: "#2e9d4f" }
   poly:            { name: "Polysilicon",        color: "#d0303a" }
+  contact:         { name: "Contact",            color: "#4b5563", default_on: false, vec: boxes }
   li:              { name: "Local interconnect", color: "#8f9bb3", default_on: false }
+  li_via:          { name: "Local interconnect via", color: "#475569", default_on: false, vec: boxes }
   metal1:          { name: "Metal 1",            color: "#3b82f6", default_on: false }
+  via1:            { name: "Via 1",              color: "#1e40af", default_on: false, vec: boxes }
   metal2:          { name: "Metal 2",            color: "#14b8a6", default_on: false }
+  via2:            { name: "Via 2",              color: "#0f766e", default_on: false, vec: boxes }
   metal3:          { name: "Metal 3",            color: "#8b5cf6", default_on: false }
+  via3:            { name: "Via 3",              color: "#5b21b6", default_on: false, vec: boxes }
   metal4:          { name: "Metal 4",            color: "#ec4899", default_on: false }
+  via4:            { name: "Via 4",              color: "#9d174d", default_on: false, vec: boxes }
   metal5:          { name: "Metal 5",            color: "#a3e635", default_on: false }
+  via5:            { name: "Via 5",              color: "#4d7c0f", default_on: false, vec: boxes }
   top_metal_below: { name: "Top metal (lower)",  color: "#b87333" }
+  top_via:         { name: "Top via",            color: "#7c4a1e", default_on: false, vec: boxes }
   top_metal:       { name: "Top metal",          color: "#e0b020" }
 
 # Render settings shared by all chips.
