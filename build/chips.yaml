@@ -1,10 +1,20 @@
 # Logical layers shared by every chip: same key -> same colour everywhere.
-# Listed bottom to top (draw order).
+# Listed bottom to top (draw order). A PDK uses the ones it has.
+# The two top metals have their own keys, so the metal you see from above is
+# the same colour on every chip; the metals under them are numbered from the
+# bottom. default_on: false layers start hidden (the viewer is mostly used with
+# the top metal and the transistors; the thumbnail shows only the default ones).
 logical_layers:
-  diff:            { name: "Diffusion",         color: "#2e9d4f" }
-  poly:            { name: "Polysilicon",       color: "#d0303a" }
-  top_metal_below: { name: "Top metal (lower)", color: "#b87333" }
-  top_metal:       { name: "Top metal",         color: "#e0b020" }
+  diff:            { name: "Diffusion",          color: "#2e9d4f" }
+  poly:            { name: "Polysilicon",        color: "#d0303a" }
+  li:              { name: "Local interconnect", color: "#8f9bb3", default_on: false }
+  metal1:          { name: "Metal 1",            color: "#3b82f6", default_on: false }
+  metal2:          { name: "Metal 2",            color: "#14b8a6", default_on: false }
+  metal3:          { name: "Metal 3",            color: "#8b5cf6", default_on: false }
+  metal4:          { name: "Metal 4",            color: "#ec4899", default_on: false }
+  metal5:          { name: "Metal 5",            color: "#a3e635", default_on: false }
+  top_metal_below: { name: "Top metal (lower)",  color: "#b87333" }
+  top_metal:       { name: "Top metal",          color: "#e0b020" }
 
 # Render settings shared by all chips.
 render:

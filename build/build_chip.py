@@ -289,7 +289,9 @@ def main():
             build_tiles(path, die, layers, render, out_dir, max_zoom)
         if not args.skip_vec:
             build_vectors(layout, top, die, layers, render, out_dir)
-        build_thumb(path, die, layers, out_dir)
+        # the thumbnail is compared with the die under the microscope, so it
+        # shows the default view (top metal and transistors), not every metal
+        build_thumb(path, die, {k: v for k, v in layers.items() if v.get("default_on", True)}, out_dir)
 
     entry = {
         "id": args.chip,
@@ -308,7 +310,7 @@ def main():
         "thumb": f"data/{args.chip}/thumb.png",
         "layers": [
             {"key": k, "name": v["name"], "label": v["label"], "color": v["color"],
-             "gds": v["gds"], "z": v["z"]}
+             "gds": v["gds"], "z": v["z"], "default_on": v.get("default_on", True)}
             for k, v in layers.items()
         ],
         "bands": pdk.get("bands", []),

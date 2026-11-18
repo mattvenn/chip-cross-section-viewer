@@ -75,7 +75,11 @@ async function openViewer(chip, fromHash = {}) {
   state.store = new VectorStore(chip);
   state.zero = fromHash.zero || storage.get(`zero:${chip.id}`, { x: 0, y: 0 });
   state.localLines = storage.get(`lines:${chip.id}`, []);
-  state.layerOn = storage.get(`layers:${chip.id}`, Object.fromEntries(chip.layers.map(l => [l.key, true])));
+  // Layers not in the stored choice (e.g. newly added ones) start at their default.
+  state.layerOn = {
+    ...Object.fromEntries(chip.layers.map(l => [l.key, l.default_on !== false])),
+    ...storage.get(`layers:${chip.id}`, {}),
+  };
   state.opacity = storage.get("opacity", 0.8);
   $("#opacity").value = state.opacity;
 
@@ -85,7 +89,7 @@ async function openViewer(chip, fromHash = {}) {
   buildLayerList(chip);
   if (!state.xs) state.xs = new CrossSection($("#xs-canvas"), $("#xs-tip"), chip, { onHover: showHoverOnMap, onDblClick: showXsSpotOnMap });
   else state.xs.setChip(chip);
-  state.xsLayers = null;
+  state.xsCache = null;
   updateZeroInfo();
   await loadSavedLines();
   setCut(fromHash.cut || null, { show: !!fromHash.cut });
@@ -211,7 +215,7 @@ function buildLayerList(chip) {
       state.layerOn[l.key] = e.target.checked;
       storage.set(`layers:${chip.id}`, state.layerOn);
       applyLayerVisibility();
-      redrawXs();
+      updateXs();  // loads the layer's part of the cross-section if it isn't loaded yet
     };
     list.appendChild(row);
   }
@@ -399,6 +403,78 @@ function onLineInput() {
   showSavedSelection("");
 }
 
+// Scroll wheel / arrow keys on the position box step the digit at the cursor:
+// with the cursor next to the units digit it moves 1 µm, after the first
+// decimal 0.1 µm, and so on. The stepped digit is then selected, so it shows
+// which digit the next step changes.
+const posStepper = { step: null, sel: null, acc: 0, timer: 0 };
+
+// Place value (µm) of the digit at the cursor in `text`: the selected digit,
+// else the digit just left of the cursor, else the one just right of it.
+function digitPlace(text, start, end) {
+  const isDigit = i => i >= 0 && i < text.length && /\d/.test(text[i]);
+  let i = end - start === 1 && isDigit(start) ? start : isDigit(start - 1) ? start - 1 : isDigit(start) ? start : -1;
+  if (i < 0) return null;
+  const dp = text.includes(".") ? text.indexOf(".") : text.length;
+  return i < dp ? dp - i - 1 : -(i - dp);  // exponent of 10
+}
+
+// Index of the digit with place value 10^exp in `text`, or -1.
+function digitIndex(text, exp) {
+  const dp = text.includes(".") ? text.indexOf(".") : text.length;
+  const i = exp >= 0 ? dp - 1 - exp : dp - exp;
+  return i >= 0 && i < text.length && /\d/.test(text[i]) ? i : -1;
+}
+
+function stepPos(dir) {
+  const el = $("#pos");
+  if (!state.cut) return;
+  const { selectionStart: a, selectionEnd: b } = el;
+  // Keep the step while the selection is the one we set (the digit may have
+  // disappeared, e.g. stepping 1000.000 down by 1000 leaves 0.000).
+  let exp = posStepper.sel && posStepper.sel[0] === a && posStepper.sel[1] === b ? posStepper.step : null;
+  if (exp == null) exp = digitPlace(el.value, a, b);
+  if (exp == null) exp = 0;  // no digit at the cursor: whole µm
+  const z = state.cut.axis === "h" ? state.zero.y : state.zero.x;
+  const cur = parseFloat(el.value);
+  const rel = (Number.isNaN(cur) ? state.cut.pos - z : cur) + dir * Math.pow(10, exp);
+  setCut({ axis: state.cut.axis, pos: rel + z }, { quiet: true, show: true });
+  showSavedSelection("");
+  el.value = fmt3(state.cut.pos - z);
+  const i = digitIndex(el.value, exp);
+  const sel = i >= 0 ? [i, i + 1] : [0, 0];
+  el.setSelectionRange(sel[0], sel[1]);
+  posStepper.step = exp;
+  posStepper.sel = sel;
+  // Update the cross-section once the scrolling pauses.
+  clearTimeout(posStepper.timer);
+  posStepper.timer = setTimeout(() => setCut(state.cut), 200);
+}
+
+function onPosWheel(e) {
+  const el = $("#pos");
+  if (document.activeElement !== el || el.disabled) return;  // otherwise scroll the page
+  e.preventDefault();
+  // A mouse wheel notch is one step; trackpads send many small deltas, so add
+  // them up until they make a notch's worth.
+  const dy = e.deltaMode ? e.deltaY * 40 : e.deltaY;
+  if (Math.abs(dy) >= 40) posStepper.acc = dy;
+  else posStepper.acc += dy;
+  if (Math.abs(posStepper.acc) < 40) return;
+  const dir = posStepper.acc < 0 ? 1 : -1;  // scroll up = larger
+  posStepper.acc = 0;
+  stepPos(dir);
+}
+
+function onPosKey(e) {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    stepPos(e.key === "ArrowUp" ? 1 : -1);
+  } else if (e.key === "Enter") {
+    onLineInput();
+  }
+}
+
 // The zero is kept on the die: a click just outside it lands on the nearest edge.
 function setZero(p) {
   const { width_um: W, height_um: H } = state.chip;
@@ -420,27 +496,35 @@ function updateZeroInfo() {
 
 let xsToken = 0;
 
+const isLayerOn = key => state.layerOn[key] !== false;
+
+// Only the layers that are switched on are loaded; their intervals are kept for
+// the current line, so turning a layer off and on again is instant.
 // A moved line keeps the cross-section's zoom: lines on the same axis share the
 // same along-line coordinates. A new line, or a change of axis, fits it to the map.
 async function updateXs({ newLine = false } = {}) {
   const l = state.line;
-  if (!l) { state.xs.setData(null); $("#xs-status").textContent = ""; return; }
+  if (!l) { state.xs.setData(null); state.xsCache = null; $("#xs-status").textContent = ""; return; }
+  const key = `${state.cut.axis},${state.cut.pos}`;
+  if (!state.xsCache || state.xsCache.key !== key) state.xsCache = { key, intervals: {} };
+  const cache = state.xsCache;
+  const need = state.chip.layers.filter(ly => isLayerOn(ly.key) && !cache.intervals[ly.key]);
   const token = ++xsToken;
-  $("#xs-status").textContent = "loading…";
-  let layers;
-  try {
-    layers = await Promise.all(state.chip.layers.map(async ly => ({
-      ...ly, intervals: await state.store.intervals(ly.key, l.x0, l.y0, l.x1, l.y1),
-    })));
-  } catch (err) {
-    if (token !== xsToken) return;
-    console.error("cross-section data failed to load:", err);
-    $("#xs-status").innerHTML = `<span class="error">Couldn't load the cross-section data.</span> ` +
-      `<button class="small-btn" data-action="xs-retry">Retry</button>`;
-    return;
+  if (need.length) {
+    $("#xs-status").textContent = "loading…";
+    let got;
+    try {
+      got = await Promise.all(need.map(ly => state.store.intervals(ly.key, l.x0, l.y0, l.x1, l.y1)));
+    } catch (err) {
+      if (token !== xsToken) return;
+      console.error("cross-section data failed to load:", err);
+      $("#xs-status").innerHTML = `<span class="error">Couldn't load the cross-section data.</span> ` +
+        `<button class="small-btn" data-action="xs-retry">Retry</button>`;
+      return;
+    }
+    need.forEach((ly, i) => { cache.intervals[ly.key] = got[i]; });
   }
   if (token !== xsToken) return;
-  state.xsLayers = layers;
   $("#xs-status").textContent = "";
   const keep = !newLine && state.xsAxis === state.cut.axis && !!state.xs.view;
   state.xsAxis = state.cut.axis;
@@ -464,11 +548,14 @@ function fitXsToMap() {
 
 // Recompute the axis offset (depends on zero) and enabled layers without refetching.
 function redrawXs(keepView = true) {
-  const l = state.line;
-  if (!l || !state.xsLayers) return;
+  const l = state.line, cache = state.xsCache;
+  if (!l || !cache) return;
   const dx = l.x1 - l.x0, dy = l.y1 - l.y0, len = Math.hypot(dx, dy);
   const offset = len ? ((state.zero.x - l.x0) * dx + (state.zero.y - l.y0) * dy) / len : 0;
-  const layers = state.xsLayers.map(ly => ({ ...ly, enabled: state.layerOn[ly.key] !== false }));
+  const layers = state.chip.layers.map(ly => {
+    const iv = cache.intervals[ly.key];
+    return { ...ly, intervals: iv || [], enabled: isLayerOn(ly.key) && !!iv };
+  });
   const prev = state.xs.data;
   const shift = prev && keepView ? offset - prev.offset : 0;
   state.xs.setData({ length: len, offset, layers }, keepView);
@@ -645,6 +732,10 @@ document.addEventListener("click", e => {
   if (el && actions[el.dataset.action]) actions[el.dataset.action]();
 });
 $("#pos").addEventListener("change", onLineInput);
+$("#pos").addEventListener("wheel", onPosWheel, { passive: false });
+$("#pos").addEventListener("keydown", onPosKey);
+// Typing or clicking picks a new digit; forget the remembered step.
+for (const ev of ["input", "pointerdown"]) $("#pos").addEventListener(ev, () => { posStepper.sel = null; });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && state.map) setMode(null); });
 $("#saved-lines").addEventListener("change", e => selectSavedLine(e.target.value));
 $("#opacity").addEventListener("input", e => {
