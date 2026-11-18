@@ -108,12 +108,15 @@ class VectorStore {
     return this.cache[key];
   }
 
-  // Cells [cx, cy] crossed by the segment (x0,y0)-(x1,y1).
+  // Cells [cx, cy] crossed by the segment (x0,y0)-(x1,y1). A segment lying
+  // exactly on a cell boundary (e.g. Y = 2500 with 50 µm cells) gets the cells
+  // on both sides: shapes are split at the boundary, and which half the line
+  // counts as inside depends on segmentPolygonIntervals' tie-break.
   cellsOnSegment(x0, y0, x1, y1) {
-    const c = this.cellUm, out = [];
+    const c = this.cellUm, out = [], e = 1e-6;
     const ncx = Math.ceil(this.chip.width_um / c), ncy = Math.ceil(this.chip.height_um / c);
-    const minx = Math.max(0, Math.floor(Math.min(x0, x1) / c)), maxx = Math.min(ncx - 1, Math.floor(Math.max(x0, x1) / c));
-    const miny = Math.max(0, Math.floor(Math.min(y0, y1) / c)), maxy = Math.min(ncy - 1, Math.floor(Math.max(y0, y1) / c));
+    const minx = Math.max(0, Math.floor((Math.min(x0, x1) - e) / c)), maxx = Math.min(ncx - 1, Math.floor((Math.max(x0, x1) + e) / c));
+    const miny = Math.max(0, Math.floor((Math.min(y0, y1) - e) / c)), maxy = Math.min(ncy - 1, Math.floor((Math.max(y0, y1) + e) / c));
     for (let cx = minx; cx <= maxx; cx++) {
       for (let cy = miny; cy <= maxy; cy++) {
         if (segmentHitsBox(x0, y0, x1, y1, cx * c, cy * c, (cx + 1) * c, (cy + 1) * c)) out.push([cx, cy]);
